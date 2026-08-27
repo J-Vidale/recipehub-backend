@@ -109,11 +109,10 @@ export const getSavedRecipes = async (req, res) => {
 // Save a recipe
 export const saveRecipe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (!user.savedRecipes.includes(req.params.recipeId)) {
-      user.savedRecipes.push(req.params.recipeId);
-      await user.save();
-    }
+    await User.updateOne(
+      { _id: req.user._id },
+      { $addToSet: { savedRecipes: req.params.recipeId } }
+    );
     res.json({ message: "Recipe saved" });
   } catch (err) {
     res.status(500).json({ message: "Failed to save recipe" });
@@ -123,11 +122,10 @@ export const saveRecipe = async (req, res) => {
 // Unsave a recipe
 export const unsaveRecipe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    user.savedRecipes = user.savedRecipes.filter(
-      (id) => id.toString() !== req.params.recipeId
+    await User.updateOne(
+      { _id: req.user._id },
+      { $pull: { savedRecipes: req.params.recipeId } }
     );
-    await user.save();
     res.json({ message: "Recipe unsaved" });
   } catch (err) {
     res.status(500).json({ message: "Failed to unsave recipe" });
