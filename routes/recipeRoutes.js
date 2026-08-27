@@ -37,7 +37,7 @@ router.route("/mine").get(protect, getMyRecipes);
 
 router
   .route("/:id")
-  .get(protect, getSingleRecipe)
+  .get(getSingleRecipe)
   .put(protect, updateRecipe)
   .delete(protect, deleteRecipe);
 

@@ -13,14 +13,18 @@ router.get("/", async (req, res) => {
 
   try {
     const response = await axios.get(
-      `https://www.themealdb.com/api/json/v1/1/search.php?s=${search}`
+      `https://www.themealdb.com/api/json/v1/1/search.php?s=${search}`,
+      { timeout: 5000 }
     );
 
     const meals = response.data.meals || [];
     res.json(meals);
   } catch (error) {
     console.error("Error fetching from TheMealDB:", error.message);
-    res.status(500).json({ message: "Failed to fetch meals." });
+    if (error.code === "ECONNABORTED") {
+      return res.status(504).json({ message: "TheMealDB took too long to respond." });
+    }
+    res.status(502).json({ message: "Failed to fetch meals." });
   }
 });
 

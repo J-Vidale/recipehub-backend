@@ -1,6 +1,5 @@
 // controllers/recipeController.js
 import Recipe from "../models/Recipe.js";
-import Ingredient from "../models/Ingredient.js";
 import User from "../models/User.js";
 import Like from "../models/Like.js";
 import Comment from "../models/Comment.js";
@@ -8,14 +7,51 @@ import CommentLike from "../models/CommentLike.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 
+const validateIngredients = (ingredients) => {
+  if (!Array.isArray(ingredients)) {
+    return { error: "Ingredients must be an array" };
+  }
+  for (const item of ingredients) {
+    if (
+      !item ||
+      typeof item.name !== "string" ||
+      !item.name.trim() ||
+      typeof item.amount !== "string" ||
+      !item.amount.trim()
+    ) {
+      return { error: "Each ingredient needs a name and an amount" };
+    }
+  }
+  return {
+    cleaned: ingredients.map((item) => ({
+      name: item.name.trim(),
+      amount: item.amount.trim(),
+    })),
+  };
+};
+
 // POST /api/recipes
 export const createRecipe = async (req, res) => {
-  const { title, instructions, category } = req.body;
+  const { title, instructions, category, ingredients } = req.body;
+
+  if (typeof title !== "string" || !title.trim()) {
+    return res.status(400).json({ message: "Title is required" });
+  }
+
+  let cleanIngredients = [];
+  if (ingredients !== undefined) {
+    const { error, cleaned } = validateIngredients(ingredients);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    cleanIngredients = cleaned;
+  }
 
   const recipe = await Recipe.create({
-    title,
+    title: title.trim(),
     instructions,
     category,
+    ingredients: cleanIngredients,
     user: req.user._id,
   });
 
@@ -40,7 +76,7 @@ export const getSingleRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
   try {
-    const recipe = await Recipe.findById(req.params.id).populate("ingredients");
+    const recipe = await Recipe.findById(req.params.id);
     if (!recipe) {
       return res.status(404).json({ message: "Recipe not found" });
     }
@@ -65,6 +101,14 @@ export const updateRecipe = async (req, res) => {
   recipe.title = req.body.title || recipe.title;
   recipe.instructions = req.body.instructions || recipe.instructions;
   recipe.category = req.body.category || recipe.category;
+
+  if (req.body.ingredients !== undefined) {
+    const { error, cleaned } = validateIngredients(req.body.ingredients);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    recipe.ingredients = cleaned;
+  }
 
   const updated = await recipe.save();
   res.json(updated);
@@ -97,7 +141,6 @@ export const deleteRecipe = async (req, res) => {
     await CommentLike.deleteMany({ comment: { $in: commentIds } });
     await Like.deleteMany({ recipe: recipe._id });
     await Comment.deleteMany({ recipe: recipe._id });
-    await Ingredient.deleteMany({ recipe: recipe._id });
     await Recipe.deleteOne({ _id: recipe._id });
 
     res.json({ message: "Recipe deleted" });
@@ -112,6 +155,9 @@ export const deleteRecipe = async (req, res) => {
 // GET /api/recipes/user/:userId
 export const getRecipesByUser = async (req, res) => {
   const { userId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ message: "Invalid user ID" });
+  }
   const recipes = await Recipe.find({ user: userId });
   res.json(recipes);
 };
@@ -130,11 +176,10 @@ export const getSavedRecipes = async (req, res) => {
 // Save a recipe
 export const saveRecipe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (!user.savedRecipes.includes(req.params.recipeId)) {
-      user.savedRecipes.push(req.params.recipeId);
-      await user.save();
-    }
+    await User.updateOne(
+      { _id: req.user._id },
+      { $addToSet: { savedRecipes: req.params.recipeId } }
+    );
     res.json({ message: "Recipe saved" });
   } catch (err) {
     res.status(500).json({ message: "Failed to save recipe" });
@@ -144,11 +189,10 @@ export const saveRecipe = async (req, res) => {
 // Unsave a recipe
 export const unsaveRecipe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    user.savedRecipes = user.savedRecipes.filter(
-      (id) => id.toString() !== req.params.recipeId
+    await User.updateOne(
+      { _id: req.user._id },
+      { $pull: { savedRecipes: req.params.recipeId } }
     );
-    await user.save();
     res.json({ message: "Recipe unsaved" });
   } catch (err) {
     res.status(500).json({ message: "Failed to unsave recipe" });

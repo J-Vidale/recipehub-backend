@@ -7,8 +7,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 ## Features
 
 - User registration and login with JWT authentication
-- Create, update, delete your own recipes
-- Add ingredients to recipes
+- Create, update, delete your own recipes, with a list of ingredients on each
 - Attach photos (up to 5, carousel-style) or a short video to a recipe, stored on Cloudinary
 - Like/unlike recipes and comments, comment on recipes (with one level of replies), pin your favorite comment
 - Follow/unfollow other users
@@ -72,9 +71,9 @@ The server will start on `http://localhost:5000`.
 ### **Recipes**
 - `GET /api/recipes` — Get all recipes
 - `GET /api/recipes/mine` — Get your recipes (protected)
-- `GET /api/recipes/:id` — Get a single recipe (protected)
-- `POST /api/recipes` — Create a recipe (protected)
-- `PUT /api/recipes/:id` — Update your recipe (protected)
+- `GET /api/recipes/:id` — Get a single recipe
+- `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`.
+- `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list.
 - `DELETE /api/recipes/:id` — Delete your recipe (protected)
 - `GET /api/recipes/saved` — Get your saved recipes (protected)
 - `POST /api/recipes/save/:recipeId` — Save a recipe (protected)
@@ -92,11 +91,6 @@ The server will start on `http://localhost:5000`.
 ### **Comment Likes**
 - `POST /api/comments/:commentId/like` — Like a comment (protected, idempotent)
 - `DELETE /api/comments/:commentId/like` — Unlike a comment (protected, idempotent)
-
-### **Ingredients**
-- `POST /api/ingredients/:recipeId` — Add ingredient to recipe (protected)
-- `PUT /api/ingredients/:id` — Update ingredient (protected)
-- `DELETE /api/ingredients/:id` — Delete ingredient (protected)
 
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories

@@ -13,7 +13,14 @@ export const registerUser = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    if (!username || !email || !password) {
+    if (
+      typeof username !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      !username ||
+      !email ||
+      !password
+    ) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -56,6 +63,10 @@ export const registerUser = async (req, res) => {
 // POST /api/auth/login
 export const loginUser = async (req, res) => {
   const { username, password } = req.body;
+
+  if (typeof username !== "string" || typeof password !== "string") {
+    return res.status(401).json({ message: "Invalid username or password" });
+  }
 
   try {
     const user = await User.findOne({ username });
