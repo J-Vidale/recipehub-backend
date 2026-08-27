@@ -1,17 +1,53 @@
 // controllers/recipeController.js
 import Recipe from "../models/Recipe.js";
-import Ingredient from "../models/Ingredient.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
 
+const validateIngredients = (ingredients) => {
+  if (!Array.isArray(ingredients)) {
+    return { error: "Ingredients must be an array" };
+  }
+  for (const item of ingredients) {
+    if (
+      !item ||
+      typeof item.name !== "string" ||
+      !item.name.trim() ||
+      typeof item.amount !== "string" ||
+      !item.amount.trim()
+    ) {
+      return { error: "Each ingredient needs a name and an amount" };
+    }
+  }
+  return {
+    cleaned: ingredients.map((item) => ({
+      name: item.name.trim(),
+      amount: item.amount.trim(),
+    })),
+  };
+};
+
 // POST /api/recipes
 export const createRecipe = async (req, res) => {
-  const { title, instructions, category } = req.body;
+  const { title, instructions, category, ingredients } = req.body;
+
+  if (typeof title !== "string" || !title.trim()) {
+    return res.status(400).json({ message: "Title is required" });
+  }
+
+  let cleanIngredients = [];
+  if (ingredients !== undefined) {
+    const { error, cleaned } = validateIngredients(ingredients);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    cleanIngredients = cleaned;
+  }
 
   const recipe = await Recipe.create({
-    title,
+    title: title.trim(),
     instructions,
     category,
+    ingredients: cleanIngredients,
     user: req.user._id,
   });
 
@@ -36,7 +72,7 @@ export const getSingleRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
   try {
-    const recipe = await Recipe.findById(req.params.id).populate("ingredients");
+    const recipe = await Recipe.findById(req.params.id);
     if (!recipe) {
       return res.status(404).json({ message: "Recipe not found" });
     }
@@ -62,6 +98,14 @@ export const updateRecipe = async (req, res) => {
   recipe.instructions = req.body.instructions || recipe.instructions;
   recipe.category = req.body.category || recipe.category;
 
+  if (req.body.ingredients !== undefined) {
+    const { error, cleaned } = validateIngredients(req.body.ingredients);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    recipe.ingredients = cleaned;
+  }
+
   const updated = await recipe.save();
   res.json(updated);
 };
@@ -79,12 +123,14 @@ export const deleteRecipe = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    await Ingredient.deleteMany({ recipe: recipe._id });
     await Recipe.deleteOne({ _id: recipe._id });
 
     res.json({ message: "Recipe deleted" });
   } catch (err) {
-    res.status(500).json({ message: "Failed to delete recipe", error: err.message });
+    res.status(500).json({
+      message: "Failed to delete recipe",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 };
 

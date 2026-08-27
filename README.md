@@ -7,8 +7,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 ## Features
 
 - User registration and login with JWT authentication
-- Create, update, delete your own recipes
-- Add ingredients to recipes
+- Create, update, delete your own recipes, with a list of ingredients on each
 - Save/unsave recipes to your profile
 - View your own and saved recipes
 - RESTful API structure
@@ -62,18 +61,13 @@ The server will start on `http://localhost:5000`.
 ### **Recipes**
 - `GET /api/recipes` — Get all recipes
 - `GET /api/recipes/mine` — Get your recipes (protected)
-- `GET /api/recipes/:id` — Get a single recipe (protected)
-- `POST /api/recipes` — Create a recipe (protected)
-- `PUT /api/recipes/:id` — Update your recipe (protected)
+- `GET /api/recipes/:id` — Get a single recipe
+- `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`.
+- `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list.
 - `DELETE /api/recipes/:id` — Delete your recipe (protected)
 - `GET /api/recipes/saved` — Get your saved recipes (protected)
 - `POST /api/recipes/save/:recipeId` — Save a recipe (protected)
 - `DELETE /api/recipes/unsave/:recipeId` — Unsave a recipe (protected)
-
-### **Ingredients**
-- `POST /api/ingredients/:recipeId` — Add ingredient to recipe (protected)
-- `PUT /api/ingredients/:id` — Update ingredient (protected)
-- `DELETE /api/ingredients/:id` — Delete ingredient (protected)
 
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories
