@@ -91,7 +91,10 @@ export const deleteRecipe = async (req, res) => {
 
     res.json({ message: "Recipe deleted" });
   } catch (err) {
-    res.status(500).json({ message: "Failed to delete recipe", error: err.message });
+    res.status(500).json({
+      message: "Failed to delete recipe",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 };
 

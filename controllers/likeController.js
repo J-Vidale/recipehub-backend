@@ -2,6 +2,7 @@
 import mongoose from "mongoose";
 import Recipe from "../models/Recipe.js";
 import Like from "../models/Like.js";
+import { addLike, removeLike } from "../utils/likeToggle.js";
 
 // POST /api/recipes/:id/like
 export const likeRecipe = async (req, res) => {
@@ -14,18 +15,14 @@ export const likeRecipe = async (req, res) => {
     return res.status(404).json({ message: "Recipe not found" });
   }
 
-  try {
-    await Like.create({ user: req.user._id, recipe: recipe._id });
-    recipe.likeCount += 1;
-    await recipe.save();
-  } catch (err) {
-    if (err.code !== 11000) {
-      throw err;
-    }
-    // Already liked - idempotent; recipe.likeCount already reflects it.
-  }
+  const result = await addLike({
+    LikeModel: Like,
+    likeQuery: { user: req.user._id, recipe: recipe._id },
+    CountModel: Recipe,
+    countId: recipe._id,
+  });
 
-  res.json({ likeCount: recipe.likeCount, likedByMe: true });
+  res.json(result);
 };
 
 // DELETE /api/recipes/:id/like
@@ -39,11 +36,12 @@ export const unlikeRecipe = async (req, res) => {
     return res.status(404).json({ message: "Recipe not found" });
   }
 
-  const deleted = await Like.findOneAndDelete({ user: req.user._id, recipe: recipe._id });
-  if (deleted) {
-    recipe.likeCount = Math.max(0, recipe.likeCount - 1);
-    await recipe.save();
-  }
+  const result = await removeLike({
+    LikeModel: Like,
+    likeQuery: { user: req.user._id, recipe: recipe._id },
+    CountModel: Recipe,
+    countId: recipe._id,
+  });
 
-  res.json({ likeCount: recipe.likeCount, likedByMe: false });
+  res.json(result);
 };

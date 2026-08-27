@@ -2,6 +2,7 @@
 import mongoose from "mongoose";
 import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
+import { addLike, removeLike } from "../utils/likeToggle.js";
 
 // POST /api/comments/:commentId/like
 export const likeComment = async (req, res) => {
@@ -14,18 +15,14 @@ export const likeComment = async (req, res) => {
     return res.status(404).json({ message: "Comment not found" });
   }
 
-  try {
-    await CommentLike.create({ user: req.user._id, comment: comment._id });
-    comment.likeCount += 1;
-    await comment.save();
-  } catch (err) {
-    if (err.code !== 11000) {
-      throw err;
-    }
-    // Already liked - idempotent; comment.likeCount already reflects it.
-  }
+  const result = await addLike({
+    LikeModel: CommentLike,
+    likeQuery: { user: req.user._id, comment: comment._id },
+    CountModel: Comment,
+    countId: comment._id,
+  });
 
-  res.json({ likeCount: comment.likeCount, likedByMe: true });
+  res.json(result);
 };
 
 // DELETE /api/comments/:commentId/like
@@ -39,11 +36,12 @@ export const unlikeComment = async (req, res) => {
     return res.status(404).json({ message: "Comment not found" });
   }
 
-  const deleted = await CommentLike.findOneAndDelete({ user: req.user._id, comment: comment._id });
-  if (deleted) {
-    comment.likeCount = Math.max(0, comment.likeCount - 1);
-    await comment.save();
-  }
+  const result = await removeLike({
+    LikeModel: CommentLike,
+    likeQuery: { user: req.user._id, comment: comment._id },
+    CountModel: Comment,
+    countId: comment._id,
+  });
 
-  res.json({ likeCount: comment.likeCount, likedByMe: false });
+  res.json(result);
 };

@@ -2,6 +2,7 @@
 import mongoose from "mongoose";
 import Recipe from "../models/Recipe.js";
 import Comment from "../models/Comment.js";
+import CommentLike from "../models/CommentLike.js";
 
 const MAX_TEXT_LENGTH = 1000;
 
@@ -17,7 +18,7 @@ export const addComment = async (req, res) => {
   }
 
   const { text, parentComment } = req.body;
-  if (!text || !text.trim()) {
+  if (typeof text !== "string" || !text.trim()) {
     return res.status(400).json({ message: "Comment text is required" });
   }
   if (text.length > MAX_TEXT_LENGTH) {
@@ -32,8 +33,13 @@ export const addComment = async (req, res) => {
       return res.status(400).json({ message: "Invalid parent comment ID" });
     }
     const parent = await Comment.findById(parentComment);
-    if (!parent || parent.recipe.toString() !== recipe._id.toString()) {
+    if (!parent) {
       return res.status(404).json({ message: "Parent comment not found" });
+    }
+    if (parent.recipe.toString() !== recipe._id.toString()) {
+      return res
+        .status(400)
+        .json({ message: "Parent comment belongs to a different recipe" });
     }
     if (parent.parentComment) {
       return res.status(400).json({
@@ -50,8 +56,7 @@ export const addComment = async (req, res) => {
     text: text.trim(),
   });
 
-  recipe.commentCount += 1;
-  await recipe.save();
+  await Recipe.updateOne({ _id: recipe._id }, { $inc: { commentCount: 1 } });
 
   const populated = await comment.populate("user", "username");
   res.status(201).json(populated);
@@ -164,19 +169,20 @@ export const deleteComment = async (req, res) => {
   }
 
   const replies = await Comment.find({ parentComment: comment._id });
-  const deletedCount = 1 + replies.length;
+  const commentIds = [comment._id, ...replies.map((r) => r._id)];
+  const deletedCount = commentIds.length;
 
-  await Comment.deleteMany({
-    _id: { $in: [comment._id, ...replies.map((r) => r._id)] },
-  });
+  await CommentLike.deleteMany({ comment: { $in: commentIds } });
+  await Comment.deleteMany({ _id: { $in: commentIds } });
 
-  recipe.commentCount = Math.max(0, recipe.commentCount - deletedCount);
+  await Recipe.updateOne(
+    { _id: recipe._id },
+    { $inc: { commentCount: -deletedCount } }
+  );
 
   if (recipe.pinnedComment && recipe.pinnedComment.toString() === comment._id.toString()) {
-    recipe.pinnedComment = null;
+    await Recipe.updateOne({ _id: recipe._id }, { $set: { pinnedComment: null } });
   }
-
-  await recipe.save();
 
   res.json({ message: "Comment deleted" });
 };
