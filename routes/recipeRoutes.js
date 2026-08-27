@@ -3,6 +3,7 @@ import {
   createRecipe,
   getAllRecipes,
   getMyRecipes,
+  getFollowingFeed,
   getSingleRecipe,
   updateRecipe,
   deleteRecipe,
@@ -34,6 +35,7 @@ router
   .post(protect, createRecipe);
 
 router.route("/mine").get(protect, getMyRecipes);
+router.get("/feed", protect, getFollowingFeed);
 
 router
   .route("/:id")

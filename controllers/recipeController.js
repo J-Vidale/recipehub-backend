@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import Like from "../models/Like.js";
 import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
+import Follow from "../models/Follow.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 
@@ -60,8 +61,115 @@ export const createRecipe = async (req, res) => {
 
 // GET /api/recipes
 export const getAllRecipes = async (req, res) => {
-  const recipes = await Recipe.find().populate("user", "name");
-  res.json(recipes);
+  const { page, limit, sort } = req.query;
+
+  let parsedPage = parseInt(page, 10);
+  if (!Number.isInteger(parsedPage) || parsedPage < 1) {
+    parsedPage = 1;
+  }
+
+  let parsedLimit = parseInt(limit, 10);
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+    parsedLimit = 20;
+  }
+  parsedLimit = Math.min(parsedLimit, 50);
+
+  const skip = (parsedPage - 1) * parsedLimit;
+
+  try {
+    if (sort === "newest") {
+      const recipes = await Recipe.find()
+        .sort({ _id: -1 })
+        .skip(skip)
+        .limit(parsedLimit + 1)
+        .populate("user", "username");
+
+      const hasMore = recipes.length > parsedLimit;
+      return res.json({
+        recipes: hasMore ? recipes.slice(0, parsedLimit) : recipes,
+        page: parsedPage,
+        hasMore,
+      });
+    }
+
+    const recipes = await Recipe.aggregate([
+      {
+        $addFields: {
+          ageInHours: {
+            $divide: [{ $subtract: [new Date(), "$createdAt"] }, 1000 * 60 * 60],
+          },
+        },
+      },
+      {
+        $addFields: {
+          trendingScore: {
+            $divide: [
+              {
+                $add: [
+                  { $multiply: ["$saveCount", 3] },
+                  { $multiply: ["$commentCount", 2] },
+                  { $multiply: ["$likeCount", 1] },
+                ],
+              },
+              { $pow: [{ $add: ["$ageInHours", 2] }, 1.5] },
+            ],
+          },
+        },
+      },
+      { $sort: { trendingScore: -1, _id: -1 } },
+      { $skip: skip },
+      { $limit: parsedLimit + 1 },
+    ]);
+
+    const hasMore = recipes.length > parsedLimit;
+    const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
+    await Recipe.populate(page, { path: "user", select: "username" });
+
+    res.json({ recipes: page, page: parsedPage, hasMore });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch recipes" });
+  }
+};
+
+// GET /api/recipes/feed
+export const getFollowingFeed = async (req, res) => {
+  const { cursor, limit } = req.query;
+
+  if (cursor !== undefined && !mongoose.Types.ObjectId.isValid(cursor)) {
+    return res.status(400).json({ message: "Invalid cursor" });
+  }
+
+  let parsedLimit = parseInt(limit, 10);
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1) {
+    parsedLimit = 20;
+  }
+  parsedLimit = Math.min(parsedLimit, 50);
+
+  try {
+    const followingIds = await Follow.find({ follower: req.user._id }).distinct("following");
+
+    if (followingIds.length === 0) {
+      return res.json({ recipes: [], nextCursor: null });
+    }
+
+    const query = { user: { $in: followingIds } };
+    if (cursor) {
+      query._id = { $lt: cursor };
+    }
+
+    const recipes = await Recipe.find(query)
+      .sort({ _id: -1 })
+      .limit(parsedLimit + 1)
+      .populate("user", "username");
+
+    const hasMore = recipes.length > parsedLimit;
+    const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
+    const nextCursor = hasMore ? page[page.length - 1]._id : null;
+
+    res.json({ recipes: page, nextCursor });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch feed" });
+  }
 };
 
 // GET /api/recipes/mine
@@ -176,10 +284,16 @@ export const getSavedRecipes = async (req, res) => {
 // Save a recipe
 export const saveRecipe = async (req, res) => {
   try {
-    await User.updateOne(
+    const result = await User.updateOne(
       { _id: req.user._id },
       { $addToSet: { savedRecipes: req.params.recipeId } }
     );
+    if (result.modifiedCount > 0) {
+      await Recipe.updateOne(
+        { _id: req.params.recipeId },
+        { $inc: { saveCount: 1 } }
+      );
+    }
     res.json({ message: "Recipe saved" });
   } catch (err) {
     res.status(500).json({ message: "Failed to save recipe" });
@@ -189,10 +303,16 @@ export const saveRecipe = async (req, res) => {
 // Unsave a recipe
 export const unsaveRecipe = async (req, res) => {
   try {
-    await User.updateOne(
+    const result = await User.updateOne(
       { _id: req.user._id },
       { $pull: { savedRecipes: req.params.recipeId } }
     );
+    if (result.modifiedCount > 0) {
+      await Recipe.updateOne(
+        { _id: req.params.recipeId, saveCount: { $gt: 0 } },
+        { $inc: { saveCount: -1 } }
+      );
+    }
     res.json({ message: "Recipe unsaved" });
   } catch (err) {
     res.status(500).json({ message: "Failed to unsave recipe" });
