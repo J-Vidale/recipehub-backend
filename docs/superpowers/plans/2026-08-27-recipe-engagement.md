@@ -542,6 +542,491 @@ git commit -m "Cascade-delete likes and comments when a recipe is deleted"
 
 ---
 
+## Addendum: comment likes and pinning
+
+Added per explicit request to match Instagram/TikTok more fully: liking
+individual comments, and the recipe owner pinning one top-level comment
+(TikTok's single-pin model). See the spec's "Addendum" section for the
+full rationale. Additional constraints for these tasks:
+
+- `CommentLike` has a unique compound index on `(user, comment)`, mirroring `Like`.
+- Only a top-level comment (`parentComment === null`) can be pinned; pinning is recipe-owner only.
+- `Recipe.pinnedComment` holds at most one comment ID at a time — pinning a new one overwrites it.
+- `GET .../comments` moves the pinned comment to the front via a stable sort; all other ordering is unchanged.
+
+---
+
+### Task 6: CommentLike model and Comment.likeCount
+
+**Files:**
+- Create: `models/CommentLike.js`
+- Modify: `models/Comment.js`
+
+**Interfaces:**
+- Produces: `CommentLike` model — `{ _id, user, comment, createdAt, updatedAt }`, unique on `(user, comment)`. `Comment.likeCount` (Number, default 0). Both consumed by Task 7 and Task 9.
+
+- [ ] **Step 1: Create the CommentLike model**
+
+Create `models/CommentLike.js`:
+
+```js
+// models/CommentLike.js
+import mongoose from "mongoose";
+
+const commentLikeSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    comment: { type: mongoose.Schema.Types.ObjectId, ref: "Comment", required: true },
+  },
+  { timestamps: true }
+);
+
+commentLikeSchema.index({ user: 1, comment: 1 }, { unique: true });
+
+export default mongoose.model("CommentLike", commentLikeSchema);
+```
+
+- [ ] **Step 2: Add `likeCount` to the Comment schema**
+
+In `models/Comment.js`, add `likeCount` alongside `text`:
+
+```js
+    text: { type: String, required: true, trim: true, maxlength: 1000 },
+    likeCount: { type: Number, default: 0 },
+```
+
+- [ ] **Step 3: Verify the CommentLike model's index and validation**
+
+Run:
+```bash
+node -e "
+import('./models/CommentLike.js').then(({ default: CommentLike }) => {
+  const mongoose = require('mongoose');
+  console.log('indexes:', JSON.stringify(CommentLike.schema.indexes()));
+  const doc = new CommentLike({ user: new mongoose.Types.ObjectId(), comment: new mongoose.Types.ObjectId() });
+  console.log('valid doc errors (expect undefined):', doc.validateSync());
+  const missing = new CommentLike({});
+  const missingErr = missing.validateSync();
+  console.log('missing fields errors (expect user, comment):', missingErr?.errors ? Object.keys(missingErr.errors) : null);
+});
+"
+```
+Expected: `indexes` shows an entry for `{"user":1,"comment":1}` with `unique:true`; valid doc errors is `undefined`; missing fields lists `['user', 'comment']` (order may vary).
+
+- [ ] **Step 4: Verify `likeCount` defaults to 0 on Comment**
+
+Run:
+```bash
+node -e "
+import('./models/Comment.js').then(({ default: Comment }) => {
+  const mongoose = require('mongoose');
+  const c = new Comment({ recipe: new mongoose.Types.ObjectId(), user: new mongoose.Types.ObjectId(), text: 'Test' });
+  console.log('likeCount:', c.likeCount, '(expect 0)');
+});
+"
+```
+Expected: `likeCount: 0 (expect 0)`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add models/CommentLike.js models/Comment.js
+git commit -m "Add CommentLike model and Comment.likeCount"
+```
+
+---
+
+### Task 7: Comment like/unlike controller and routes
+
+**Files:**
+- Create: `controllers/commentLikeController.js`
+- Create: `routes/commentRoutes.js`
+- Modify: `server.js`
+
+**Interfaces:**
+- Consumes: `CommentLike` and `Comment.likeCount` from Task 6, `protect` from `middleware/authMiddleware.js`.
+- Produces: `likeComment`, `unlikeComment` controller functions; routes `POST /api/comments/:commentId/like` and `DELETE /api/comments/:commentId/like`, both returning `{ likeCount, likedByMe }`.
+
+- [ ] **Step 1: Create the comment-like controller**
+
+Create `controllers/commentLikeController.js`:
+
+```js
+// controllers/commentLikeController.js
+import mongoose from "mongoose";
+import Comment from "../models/Comment.js";
+import CommentLike from "../models/CommentLike.js";
+
+// POST /api/comments/:commentId/like
+export const likeComment = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.commentId)) {
+    return res.status(400).json({ message: "Invalid comment ID" });
+  }
+
+  const comment = await Comment.findById(req.params.commentId);
+  if (!comment) {
+    return res.status(404).json({ message: "Comment not found" });
+  }
+
+  try {
+    await CommentLike.create({ user: req.user._id, comment: comment._id });
+    comment.likeCount += 1;
+    await comment.save();
+  } catch (err) {
+    if (err.code !== 11000) {
+      throw err;
+    }
+    // Already liked - idempotent; comment.likeCount already reflects it.
+  }
+
+  res.json({ likeCount: comment.likeCount, likedByMe: true });
+};
+
+// DELETE /api/comments/:commentId/like
+export const unlikeComment = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.commentId)) {
+    return res.status(400).json({ message: "Invalid comment ID" });
+  }
+
+  const comment = await Comment.findById(req.params.commentId);
+  if (!comment) {
+    return res.status(404).json({ message: "Comment not found" });
+  }
+
+  const deleted = await CommentLike.findOneAndDelete({ user: req.user._id, comment: comment._id });
+  if (deleted) {
+    comment.likeCount = Math.max(0, comment.likeCount - 1);
+    await comment.save();
+  }
+
+  res.json({ likeCount: comment.likeCount, likedByMe: false });
+};
+```
+
+- [ ] **Step 2: Create the comment routes file**
+
+Create `routes/commentRoutes.js`:
+
+```js
+import express from "express";
+import { likeComment, unlikeComment } from "../controllers/commentLikeController.js";
+import { protect } from "../middleware/authMiddleware.js";
+
+const router = express.Router();
+
+router.post("/:commentId/like", protect, likeComment);
+router.delete("/:commentId/like", protect, unlikeComment);
+
+export default router;
+```
+
+- [ ] **Step 3: Mount the new routes in server.js**
+
+In `server.js`, add the import alongside the other route imports:
+
+```js
+import commentRoutes from "./routes/commentRoutes.js";
+```
+
+And add the mount alongside the other `app.use("/api/...")` lines:
+
+```js
+app.use("/api/comments", commentRoutes);
+```
+
+- [ ] **Step 4: Verify routes load and register correctly**
+
+Run:
+```bash
+node -e "
+import('./routes/commentRoutes.js').then((m) => {
+  const router = m.default;
+  const paths = router.stack
+    .filter(l => l.route)
+    .map(l => Object.keys(l.route.methods).join(',').toUpperCase() + ' ' + l.route.path);
+  console.log(paths.join('\n'));
+}).catch(e => { console.error('FAILED:', e); process.exit(1); });
+"
+```
+Expected:
+```
+POST /:commentId/like
+DELETE /:commentId/like
+```
+
+Then confirm the whole app still boots cleanly with `npm run dev` (or a short-lived `node server.js` with dummy env vars) — no import errors.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add controllers/commentLikeController.js routes/commentRoutes.js server.js
+git commit -m "Add comment like/unlike endpoints"
+```
+
+---
+
+### Task 8: Comment pinning
+
+**Files:**
+- Modify: `models/Recipe.js`
+- Modify: `controllers/commentController.js`
+- Modify: `routes/recipeRoutes.js`
+
+**Interfaces:**
+- Consumes: `Comment` model, `Recipe` model, `protect` middleware.
+- Produces: `pinComment`, `unpinComment` controller functions added to `controllers/commentController.js`; routes `POST /api/recipes/:id/comments/:commentId/pin` and `DELETE /api/recipes/:id/pin`. Modifies existing `getComments` (pinned-first ordering) and `deleteComment` (clears the pin if the deleted comment was pinned).
+
+- [ ] **Step 1: Add `pinnedComment` to the Recipe schema**
+
+In `models/Recipe.js`, add it alongside `commentCount`:
+
+```js
+    commentCount: { type: Number, default: 0 },
+    pinnedComment: { type: mongoose.Schema.Types.ObjectId, ref: "Comment", default: null },
+```
+
+- [ ] **Step 2: Add `pinComment` and `unpinComment` to the comment controller**
+
+In `controllers/commentController.js`, add these two exports (after `addComment`, before `getComments` is fine):
+
+```js
+// POST /api/recipes/:id/comments/:commentId/pin
+export const pinComment = async (req, res) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(req.params.id) ||
+    !mongoose.Types.ObjectId.isValid(req.params.commentId)
+  ) {
+    return res.status(400).json({ message: "Invalid ID" });
+  }
+
+  const recipe = await Recipe.findById(req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  if (recipe.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  const comment = await Comment.findById(req.params.commentId);
+  if (!comment || comment.recipe.toString() !== recipe._id.toString()) {
+    return res.status(404).json({ message: "Comment not found" });
+  }
+
+  if (comment.parentComment) {
+    return res.status(400).json({ message: "Cannot pin a reply" });
+  }
+
+  recipe.pinnedComment = comment._id;
+  await recipe.save();
+
+  res.json({ pinnedComment: recipe.pinnedComment });
+};
+
+// DELETE /api/recipes/:id/pin
+export const unpinComment = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
+  const recipe = await Recipe.findById(req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  if (recipe.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  recipe.pinnedComment = null;
+  await recipe.save();
+
+  res.json({ pinnedComment: null });
+};
+```
+
+- [ ] **Step 3: Update `getComments` to sort the pinned comment first**
+
+Replace the existing `getComments` function body in `controllers/commentController.js`:
+
+```js
+// GET /api/recipes/:id/comments
+export const getComments = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
+  const recipe = await Recipe.findById(req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  const comments = await Comment.find({ recipe: recipe._id })
+    .sort({ createdAt: 1 })
+    .populate("user", "username");
+
+  if (recipe.pinnedComment) {
+    const pinnedId = recipe.pinnedComment.toString();
+    comments.sort((a, b) => {
+      const aPinned = a._id.toString() === pinnedId ? 0 : 1;
+      const bPinned = b._id.toString() === pinnedId ? 0 : 1;
+      return aPinned - bPinned;
+    });
+  }
+
+  res.json(comments);
+};
+```
+
+- [ ] **Step 4: Update `deleteComment` to clear the pin if needed**
+
+Replace the existing `deleteComment` function body in `controllers/commentController.js`:
+
+```js
+// DELETE /api/recipes/:id/comments/:commentId
+export const deleteComment = async (req, res) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(req.params.id) ||
+    !mongoose.Types.ObjectId.isValid(req.params.commentId)
+  ) {
+    return res.status(400).json({ message: "Invalid ID" });
+  }
+
+  const recipe = await Recipe.findById(req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  const comment = await Comment.findById(req.params.commentId);
+  if (!comment || comment.recipe.toString() !== recipe._id.toString()) {
+    return res.status(404).json({ message: "Comment not found" });
+  }
+
+  const isAuthor = comment.user.toString() === req.user._id.toString();
+  const isRecipeOwner = recipe.user.toString() === req.user._id.toString();
+  if (!isAuthor && !isRecipeOwner) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  const replies = await Comment.find({ parentComment: comment._id });
+  const deletedCount = 1 + replies.length;
+
+  await Comment.deleteMany({
+    _id: { $in: [comment._id, ...replies.map((r) => r._id)] },
+  });
+
+  recipe.commentCount = Math.max(0, recipe.commentCount - deletedCount);
+
+  if (recipe.pinnedComment && recipe.pinnedComment.toString() === comment._id.toString()) {
+    recipe.pinnedComment = null;
+  }
+
+  await recipe.save();
+
+  res.json({ message: "Comment deleted" });
+};
+```
+
+- [ ] **Step 5: Wire the pin/unpin routes**
+
+In `routes/recipeRoutes.js`, extend the existing comment-controller import:
+
+```js
+import {
+  addComment,
+  getComments,
+  deleteComment,
+  pinComment,
+  unpinComment,
+} from "../controllers/commentController.js";
+```
+
+And after the existing comment routes, add:
+
+```js
+router.post("/:id/comments/:commentId/pin", protect, pinComment);
+router.delete("/:id/pin", protect, unpinComment);
+```
+
+- [ ] **Step 6: Verify routes load correctly**
+
+Run:
+```bash
+node -e "
+import('./routes/recipeRoutes.js').then((m) => {
+  const router = m.default;
+  const paths = router.stack
+    .filter(l => l.route)
+    .map(l => Object.keys(l.route.methods).join(',').toUpperCase() + ' ' + l.route.path);
+  console.log(paths.join('\n'));
+}).catch(e => { console.error('FAILED:', e); process.exit(1); });
+"
+```
+Expected output includes, among the routes from earlier tasks:
+```
+POST /:id/comments/:commentId/pin
+DELETE /:id/pin
+```
+
+Then confirm the whole app still boots cleanly (short-lived `node server.js` with dummy env vars) — no import errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add models/Recipe.js controllers/commentController.js routes/recipeRoutes.js
+git commit -m "Add comment pinning (one pinned comment per recipe, owner-only)"
+```
+
+---
+
+### Task 9: Cascade-delete CommentLike docs on recipe deletion
+
+**Files:**
+- Modify: `controllers/recipeController.js`
+
+**Interfaces:**
+- Consumes: `CommentLike` from Task 6, `Comment` from the base engagement plan.
+
+- [ ] **Step 1: Update `deleteRecipe` to clean up CommentLike docs**
+
+In `controllers/recipeController.js`, add the import at the top:
+
+```js
+import CommentLike from "../models/CommentLike.js";
+```
+
+Update the cleanup block in `deleteRecipe` (which currently starts with `await Like.deleteMany(...)`) to first collect the recipe's comment IDs and delete their `CommentLike` docs:
+
+```js
+    const commentIds = await Comment.find({ recipe: recipe._id }).distinct("_id");
+    await CommentLike.deleteMany({ comment: { $in: commentIds } });
+    await Like.deleteMany({ recipe: recipe._id });
+    await Comment.deleteMany({ recipe: recipe._id });
+    await Ingredient.deleteMany({ recipe: recipe._id });
+    await Recipe.deleteOne({ _id: recipe._id });
+```
+
+- [ ] **Step 2: Verify the controller still loads**
+
+Run:
+```bash
+node -e "
+import('./controllers/recipeController.js').then((m) => {
+  console.log('deleteRecipe is function:', typeof m.deleteRecipe === 'function');
+}).catch(e => { console.error('FAILED:', e); process.exit(1); });
+"
+```
+Expected: `deleteRecipe is function: true`
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add controllers/recipeController.js
+git commit -m "Cascade-delete comment likes when a recipe is deleted"
+```
+
+---
+
 ## Done
 
-At this point: recipes support like/unlike (idempotent) and comments with one level of replies; deleting a recipe, or a top-level comment, cleans up everything underneath it; `likeCount`/`commentCount` stay accurate throughout.
+At this point: recipes support like/unlike (idempotent) and comments with one level of replies; comments themselves can be liked; the recipe owner can pin one top-level comment, which sorts to the top of the comment list; deleting a recipe, a top-level comment, or a pinned comment all clean up correctly; `likeCount`/`commentCount` stay accurate throughout.
