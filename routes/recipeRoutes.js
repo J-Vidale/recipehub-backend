@@ -11,6 +11,7 @@ import {
   saveRecipe,
   unsaveRecipe,
 } from "../controllers/recipeController.js";
+import { likeRecipe, unlikeRecipe } from "../controllers/likeController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -30,6 +31,9 @@ router
   .get(protect, getSingleRecipe)
   .put(protect, updateRecipe)
   .delete(protect, deleteRecipe);
+
+router.post("/:id/like", protect, likeRecipe);
+router.delete("/:id/like", protect, unlikeRecipe);
 
 router.post("/save/:recipeId", protect, saveRecipe);
 router.delete("/unsave/:recipeId", protect, unsaveRecipe);
