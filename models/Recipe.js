@@ -24,6 +24,7 @@ const recipeSchema = new mongoose.Schema(
       type: String,
     },
     ingredients: [ingredientSchema],
+    likeCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
