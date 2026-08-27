@@ -161,3 +161,86 @@ sign-up.
 
 The frontend will eventually need like buttons and a comment section on
 the recipe detail page. Not part of this backend spec.
+
+## Addendum: comment likes and pinning
+
+Added after the base engagement work above was already implemented and
+committed on this branch, per explicit request to match Instagram/TikTok
+behavior more fully. Builds directly on the `Comment` model and endpoints
+above.
+
+### Goals
+
+- Let a logged-in user like/unlike an individual comment (not just a
+  recipe), idempotently, same as recipe likes.
+- Let a recipe's owner pin exactly one top-level comment to the top of
+  that recipe's comment list — matches TikTok, which allows a single
+  pinned comment per video (Instagram allows up to 3; picking TikTok's
+  simpler single-pin model to avoid unnecessary complexity, still
+  "standard" behavior for this category of app).
+
+### Data model
+
+**`CommentLike`** (new collection, `models/CommentLike.js`), mirrors `Like`:
+
+```js
+{
+  user: { type: ObjectId, ref: "User", required: true },
+  comment: { type: ObjectId, ref: "Comment", required: true },
+  // timestamps: true
+}
+```
+
+Unique compound index on `(user, comment)`, same reasoning as `Like`: a
+separate collection scales independently of per-comment like count.
+
+**`Comment`** (modified): adds `likeCount: { type: Number, default: 0 }`,
+denormalized the same way as `Recipe.likeCount`.
+
+**`Recipe`** (modified): adds `pinnedComment: { type: ObjectId, ref: "Comment", default: null }`.
+Storing the pin on `Recipe` (rather than a `pinned: Boolean` on `Comment`)
+means pinning a new comment is a single overwrite — there's no way to end
+up with two comments simultaneously marked pinned.
+
+### New endpoints
+
+- **`POST /api/comments/:commentId/like`** / **`DELETE /api/comments/:commentId/like`**
+  — protected, idempotent, identical shape to the recipe like/unlike
+  endpoints, returns `{ likeCount, likedByMe }`. Lives in a new
+  `routes/commentRoutes.js` mounted at `/api/comments` in `server.js`,
+  since liking a comment only needs the comment's ID, not its recipe's.
+- **`POST /api/recipes/:id/comments/:commentId/pin`** — protected,
+  recipe-owner only. Rejects with `400` if the target comment is a reply
+  (has a non-null `parentComment`) or `404` if it doesn't belong to this
+  recipe. Sets `recipe.pinnedComment` to the comment's ID (overwriting any
+  previous pin).
+- **`DELETE /api/recipes/:id/pin`** — protected, recipe-owner only. Clears
+  `recipe.pinnedComment` unconditionally (no-op if nothing was pinned).
+
+### Existing code that needs updating
+
+- **`getComments`** (`controllers/commentController.js`): after fetching
+  the recipe's comments sorted oldest-first, if `recipe.pinnedComment` is
+  set, stable-sort so that comment moves to the front — everything else
+  keeps its original relative order. (JS `Array.prototype.sort` is
+  guaranteed stable in Node, so a simple "is this the pinned one" partition
+  is sufficient — no need to re-fetch or re-query.)
+- **`deleteComment`** (`controllers/commentController.js`): if the comment
+  being deleted is the recipe's current `pinnedComment`, clear
+  `recipe.pinnedComment` as part of the same operation.
+- **`deleteRecipe`** (`controllers/recipeController.js`): extend the
+  existing cascade-delete to also delete all `CommentLike` docs for every
+  comment on that recipe.
+
+### Error handling
+
+- `403` if pin/unpin is attempted by anyone other than the recipe owner.
+- `400` if trying to pin a reply.
+- `404` if the comment doesn't exist or belongs to a different recipe.
+- Comment like/unlike follow the same idempotent-no-error pattern as
+  recipe like/unlike.
+
+### Testing
+
+Same manual approach as the rest of this spec — no automated test
+framework in this repo. Verified via `curl` against a real MongoDB.
