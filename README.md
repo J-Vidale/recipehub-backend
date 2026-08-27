@@ -11,6 +11,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 - Add ingredients to recipes
 - Attach photos (up to 5, carousel-style) or a short video to a recipe, stored on Cloudinary
 - Like/unlike recipes and comments, comment on recipes (with one level of replies), pin your favorite comment
+- Follow/unfollow other users
 - Save/unsave recipes to your profile
 - View your own and saved recipes
 - RESTful API structure
@@ -63,6 +64,10 @@ The server will start on `http://localhost:5000`.
 
 ### **User**
 - `GET /api/users/me` — Get current user info (protected)
+- `POST /api/users/:id/follow` — Follow a user (protected, idempotent)
+- `DELETE /api/users/:id/follow` — Unfollow a user (protected, idempotent)
+- `GET /api/users/:id/followers` — List a user's followers
+- `GET /api/users/:id/following` — List who a user follows
 
 ### **Recipes**
 - `GET /api/recipes` — Get all recipes

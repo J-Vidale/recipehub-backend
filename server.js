@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import connectDB from "./config/db.js";
 import userRoutes from "./routes/userRoutes.js";
+import followRoutes from "./routes/followRoutes.js";
 import recipeRoutes from "./routes/recipeRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
 import ingredientRoutes from "./routes/ingredientRoutes.js";
@@ -33,6 +34,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use("/api/users", userRoutes);
+app.use("/api/users", followRoutes);
 app.use("/api/recipes", recipeRoutes);
 app.use("/api/comments", commentRoutes);
 app.use("/api/ingredients", ingredientRoutes);

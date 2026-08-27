@@ -28,6 +28,8 @@ const userSchema = new mongoose.Schema(
         ref: "Recipe",
       },
     ],
+    followerCount: { type: Number, default: 0 },
+    followingCount: { type: Number, default: 0 },
   },
   {
     timestamps: true,
