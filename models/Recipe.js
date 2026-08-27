@@ -24,6 +24,18 @@ const recipeSchema = new mongoose.Schema(
       type: String,
     },
     ingredients: [ingredientSchema],
+    media: [
+      {
+        type: {
+          type: String,
+          enum: ["image", "video"],
+          required: true,
+        },
+        url: { type: String, required: true },
+        publicId: { type: String, required: true },
+        order: { type: Number, required: true },
+      },
+    ],
   },
   { timestamps: true }
 );
