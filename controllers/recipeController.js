@@ -3,6 +3,7 @@ import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
+import cloudinary from "../config/cloudinary.js";
 
 // POST /api/recipes
 export const createRecipe = async (req, res) => {
@@ -78,6 +79,14 @@ export const deleteRecipe = async (req, res) => {
     if (recipe.user.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
     }
+
+    await Promise.all(
+      recipe.media.map((item) =>
+        cloudinary.uploader.destroy(item.publicId, {
+          resource_type: item.type === "video" ? "video" : "image",
+        })
+      )
+    );
 
     await Ingredient.deleteMany({ recipe: recipe._id });
     await Recipe.deleteOne({ _id: recipe._id });
