@@ -91,6 +91,9 @@ export const deleteRecipe = async (req, res) => {
 // GET /api/recipes/user/:userId
 export const getRecipesByUser = async (req, res) => {
   const { userId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.status(400).json({ message: "Invalid user ID" });
+  }
   const recipes = await Recipe.find({ user: userId });
   res.json(recipes);
 };

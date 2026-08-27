@@ -31,6 +31,10 @@ export const addIngredient = async (req, res) => {
 
 // PUT /api/ingredients/:id
 export const updateIngredient = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid ingredient ID" });
+  }
+
   const ingredient = await Ingredient.findById(req.params.id).populate("recipe", "user");
 
   if (!ingredient) {
@@ -49,6 +53,10 @@ export const updateIngredient = async (req, res) => {
 
 // DELETE /api/ingredients/:id
 export const deleteIngredient = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid ingredient ID" });
+  }
+
   const ingredient = await Ingredient.findById(req.params.id).populate("recipe", "user");
 
   if (!ingredient) {

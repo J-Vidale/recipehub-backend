@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import compression from "compression";
+import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import connectDB from "./config/db.js";
@@ -11,6 +12,7 @@ import ingredientRoutes from "./routes/ingredientRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import mealRoutes from "./routes/mealRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import { authLimiter } from "./middleware/rateLimiters.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 
 dotenv.config();
@@ -24,6 +26,7 @@ const allowedOrigins = [
   "https://recipehub-frontend-cgip.onrender.com"
 ];
 
+app.use(helmet());
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
@@ -38,7 +41,7 @@ app.use("/api/recipes", recipeRoutes);
 app.use("/api/ingredients", ingredientRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/meals", mealRoutes);
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 
 // Fix for __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
