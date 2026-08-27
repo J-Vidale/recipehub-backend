@@ -11,6 +11,8 @@ import {
   saveRecipe,
   unsaveRecipe,
 } from "../controllers/recipeController.js";
+import { addRecipeMedia, deleteRecipeMedia } from "../controllers/mediaController.js";
+import { uploadSingleMedia } from "../middleware/uploadMiddleware.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -30,6 +32,9 @@ router
   .get(protect, getSingleRecipe)
   .put(protect, updateRecipe)
   .delete(protect, deleteRecipe);
+
+router.post("/:id/media", protect, uploadSingleMedia, addRecipeMedia);
+router.delete("/:id/media/:mediaId", protect, deleteRecipeMedia);
 
 router.post("/save/:recipeId", protect, saveRecipe);
 router.delete("/unsave/:recipeId", protect, unsaveRecipe);
