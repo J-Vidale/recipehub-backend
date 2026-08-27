@@ -9,6 +9,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 - User registration and login with JWT authentication
 - Create, update, delete your own recipes
 - Add ingredients to recipes
+- Like/unlike recipes, comment on recipes (with one level of replies)
 - Save/unsave recipes to your profile
 - View your own and saved recipes
 - RESTful API structure
@@ -69,6 +70,11 @@ The server will start on `http://localhost:5000`.
 - `GET /api/recipes/saved` — Get your saved recipes (protected)
 - `POST /api/recipes/save/:recipeId` — Save a recipe (protected)
 - `DELETE /api/recipes/unsave/:recipeId` — Unsave a recipe (protected)
+- `POST /api/recipes/:id/like` — Like a recipe (protected, idempotent)
+- `DELETE /api/recipes/:id/like` — Unlike a recipe (protected, idempotent)
+- `POST /api/recipes/:id/comments` — Comment on a recipe, or reply to a top-level comment via `parentComment` (protected)
+- `GET /api/recipes/:id/comments` — List a recipe's comments
+- `DELETE /api/recipes/:id/comments/:commentId` — Delete a comment (protected, comment author or recipe owner only)
 
 ### **Ingredients**
 - `POST /api/ingredients/:recipeId` — Add ingredient to recipe (protected)
