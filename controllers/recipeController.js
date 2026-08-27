@@ -2,6 +2,8 @@
 import Recipe from "../models/Recipe.js";
 import Ingredient from "../models/Ingredient.js";
 import User from "../models/User.js";
+import Like from "../models/Like.js";
+import Comment from "../models/Comment.js";
 import mongoose from "mongoose";
 
 // POST /api/recipes
@@ -79,6 +81,8 @@ export const deleteRecipe = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
+    await Like.deleteMany({ recipe: recipe._id });
+    await Comment.deleteMany({ recipe: recipe._id });
     await Ingredient.deleteMany({ recipe: recipe._id });
     await Recipe.deleteOne({ _id: recipe._id });
 
