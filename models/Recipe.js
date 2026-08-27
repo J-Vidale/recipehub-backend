@@ -26,6 +26,7 @@ const recipeSchema = new mongoose.Schema(
     ingredients: [ingredientSchema],
     likeCount: { type: Number, default: 0 },
     commentCount: { type: Number, default: 0 },
+    pinnedComment: { type: mongoose.Schema.Types.ObjectId, ref: "Comment", default: null },
   },
   { timestamps: true }
 );

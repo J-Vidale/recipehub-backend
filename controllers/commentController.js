@@ -57,6 +57,60 @@ export const addComment = async (req, res) => {
   res.status(201).json(populated);
 };
 
+// POST /api/recipes/:id/comments/:commentId/pin
+export const pinComment = async (req, res) => {
+  if (
+    !mongoose.Types.ObjectId.isValid(req.params.id) ||
+    !mongoose.Types.ObjectId.isValid(req.params.commentId)
+  ) {
+    return res.status(400).json({ message: "Invalid ID" });
+  }
+
+  const recipe = await Recipe.findById(req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  if (recipe.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  const comment = await Comment.findById(req.params.commentId);
+  if (!comment || comment.recipe.toString() !== recipe._id.toString()) {
+    return res.status(404).json({ message: "Comment not found" });
+  }
+
+  if (comment.parentComment) {
+    return res.status(400).json({ message: "Cannot pin a reply" });
+  }
+
+  recipe.pinnedComment = comment._id;
+  await recipe.save();
+
+  res.json({ pinnedComment: recipe.pinnedComment });
+};
+
+// DELETE /api/recipes/:id/pin
+export const unpinComment = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
+  const recipe = await Recipe.findById(req.params.id);
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  if (recipe.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  recipe.pinnedComment = null;
+  await recipe.save();
+
+  res.json({ pinnedComment: null });
+};
+
 // GET /api/recipes/:id/comments
 export const getComments = async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -71,6 +125,15 @@ export const getComments = async (req, res) => {
   const comments = await Comment.find({ recipe: recipe._id })
     .sort({ createdAt: 1 })
     .populate("user", "username");
+
+  if (recipe.pinnedComment) {
+    const pinnedId = recipe.pinnedComment.toString();
+    comments.sort((a, b) => {
+      const aPinned = a._id.toString() === pinnedId ? 0 : 1;
+      const bPinned = b._id.toString() === pinnedId ? 0 : 1;
+      return aPinned - bPinned;
+    });
+  }
 
   res.json(comments);
 };
@@ -108,6 +171,11 @@ export const deleteComment = async (req, res) => {
   });
 
   recipe.commentCount = Math.max(0, recipe.commentCount - deletedCount);
+
+  if (recipe.pinnedComment && recipe.pinnedComment.toString() === comment._id.toString()) {
+    recipe.pinnedComment = null;
+  }
+
   await recipe.save();
 
   res.json({ message: "Comment deleted" });

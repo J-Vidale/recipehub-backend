@@ -12,7 +12,13 @@ import {
   unsaveRecipe,
 } from "../controllers/recipeController.js";
 import { likeRecipe, unlikeRecipe } from "../controllers/likeController.js";
-import { addComment, getComments, deleteComment } from "../controllers/commentController.js";
+import {
+  addComment,
+  getComments,
+  deleteComment,
+  pinComment,
+  unpinComment,
+} from "../controllers/commentController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -39,6 +45,9 @@ router.delete("/:id/like", protect, unlikeRecipe);
 router.post("/:id/comments", protect, addComment);
 router.get("/:id/comments", getComments);
 router.delete("/:id/comments/:commentId", protect, deleteComment);
+
+router.post("/:id/comments/:commentId/pin", protect, pinComment);
+router.delete("/:id/pin", protect, unpinComment);
 
 router.post("/save/:recipeId", protect, saveRecipe);
 router.delete("/unsave/:recipeId", protect, unsaveRecipe);
