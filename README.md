@@ -10,6 +10,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 - Create, update, delete your own recipes
 - Add ingredients to recipes
 - Attach photos (up to 5, carousel-style) or a short video to a recipe, stored on Cloudinary
+- Like/unlike recipes and comments, comment on recipes (with one level of replies), pin your favorite comment
 - Save/unsave recipes to your profile
 - View your own and saved recipes
 - RESTful API structure
@@ -75,6 +76,17 @@ The server will start on `http://localhost:5000`.
 - `DELETE /api/recipes/unsave/:recipeId` — Unsave a recipe (protected)
 - `POST /api/recipes/:id/media` — Upload a photo or video to your recipe (protected, multipart `file` field). A recipe holds either up to 5 photos or 1 video, never both.
 - `DELETE /api/recipes/:id/media/:mediaId` — Remove a media item from your recipe (protected)
+- `POST /api/recipes/:id/like` — Like a recipe (protected, idempotent)
+- `DELETE /api/recipes/:id/like` — Unlike a recipe (protected, idempotent)
+- `POST /api/recipes/:id/comments` — Comment on a recipe, or reply to a top-level comment via `parentComment` (protected)
+- `GET /api/recipes/:id/comments` — List a recipe's comments
+- `DELETE /api/recipes/:id/comments/:commentId` — Delete a comment (protected, comment author or recipe owner only)
+- `POST /api/recipes/:id/comments/:commentId/pin` — Pin a top-level comment to the top of the list (protected, recipe owner only)
+- `DELETE /api/recipes/:id/pin` — Unpin the recipe's pinned comment, if any (protected, recipe owner only)
+
+### **Comment Likes**
+- `POST /api/comments/:commentId/like` — Like a comment (protected, idempotent)
+- `DELETE /api/comments/:commentId/like` — Unlike a comment (protected, idempotent)
 
 ### **Ingredients**
 - `POST /api/ingredients/:recipeId` — Add ingredient to recipe (protected)
