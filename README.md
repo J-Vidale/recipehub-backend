@@ -9,6 +9,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 - User registration and login with JWT authentication
 - Create, update, delete your own recipes
 - Add ingredients to recipes
+- Attach photos (up to 5, carousel-style) or a short video to a recipe, stored on Cloudinary
 - Save/unsave recipes to your profile
 - View your own and saved recipes
 - RESTful API structure
@@ -72,6 +73,8 @@ The server will start on `http://localhost:5000`.
 - `GET /api/recipes/saved` — Get your saved recipes (protected)
 - `POST /api/recipes/save/:recipeId` — Save a recipe (protected)
 - `DELETE /api/recipes/unsave/:recipeId` — Unsave a recipe (protected)
+- `POST /api/recipes/:id/media` — Upload a photo or video to your recipe (protected, multipart `file` field). A recipe holds either up to 5 photos or 1 video, never both.
+- `DELETE /api/recipes/:id/media/:mediaId` — Remove a media item from your recipe (protected)
 
 ### **Ingredients**
 - `POST /api/ingredients/:recipeId` — Add ingredient to recipe (protected)
