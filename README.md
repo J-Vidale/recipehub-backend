@@ -11,6 +11,7 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 - Attach photos (up to 5, carousel-style) or a short video to a recipe, stored on Cloudinary
 - Like/unlike recipes and comments, comment on recipes (with one level of replies), pin your favorite comment
 - Follow/unfollow other users
+- Personalized following feed, and a TikTok-inspired trending discover feed
 - Save/unsave recipes to your profile
 - View your own and saved recipes
 - RESTful API structure
@@ -69,7 +70,8 @@ The server will start on `http://localhost:5000`.
 - `GET /api/users/:id/following` — List who a user follows
 
 ### **Recipes**
-- `GET /api/recipes` — Get all recipes
+- `GET /api/recipes?page=<n>&limit=<n>&sort=<newest>` — Discover feed: all recipes ranked by trending score (saves/comments/likes weighted, decayed by age), paginated. `page` defaults to 1, `limit` defaults to 20 (max 50). Pass `sort=newest` for plain chronological order instead. Response: `{ recipes, page, hasMore }`.
+- `GET /api/recipes/feed?cursor=<recipeId>&limit=<n>` — Following feed: recipes from users you follow, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Response: `{ recipes, nextCursor }`.
 - `GET /api/recipes/mine` — Get your recipes (protected)
 - `GET /api/recipes/:id` — Get a single recipe
 - `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`.
