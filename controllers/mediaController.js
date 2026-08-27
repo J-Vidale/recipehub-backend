@@ -24,8 +24,10 @@ const uploadBufferToCloudinary = (buffer, resourceType) => {
   });
 };
 
-// POST /api/recipes/:id/media
-export const addRecipeMedia = async (req, res) => {
+// Loads the recipe and checks ownership before any upload work happens, so
+// a bad ID or an unauthorized request never costs a full file upload.
+// Attaches the recipe to req.recipe for the next handler to reuse.
+export const loadOwnedRecipe = async (req, res, next) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
@@ -37,6 +39,14 @@ export const addRecipeMedia = async (req, res) => {
   if (recipe.user.toString() !== req.user._id.toString()) {
     return res.status(403).json({ message: "Not authorized" });
   }
+
+  req.recipe = recipe;
+  next();
+};
+
+// POST /api/recipes/:id/media
+export const addRecipeMedia = async (req, res) => {
+  const recipe = req.recipe;
 
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded" });
@@ -72,24 +82,35 @@ export const addRecipeMedia = async (req, res) => {
       .json({ message: `Recipes can have at most ${MAX_PHOTOS} photos` });
   }
 
+  const resourceType = mediaType === "video" ? "video" : "image";
+  let uploadResult;
   try {
-    const result = await uploadBufferToCloudinary(
-      req.file.buffer,
-      mediaType === "video" ? "video" : "image"
-    );
-
-    recipe.media.push({
-      type: mediaType,
-      url: result.secure_url,
-      publicId: result.public_id,
-      order: recipe.media.length,
+    uploadResult = await uploadBufferToCloudinary(req.file.buffer, resourceType);
+  } catch (err) {
+    return res.status(502).json({
+      message: "Media upload failed",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
+  }
 
+  recipe.media.push({
+    type: mediaType,
+    url: uploadResult.secure_url,
+    publicId: uploadResult.public_id,
+    order: recipe.media.length,
+  });
+
+  try {
     const updated = await recipe.save();
     res.status(201).json(updated);
   } catch (err) {
-    res.status(502).json({
-      message: "Media upload failed",
+    // The Cloudinary upload already succeeded - clean it up so it doesn't
+    // linger as a billable, unreferenced asset.
+    await cloudinary.uploader
+      .destroy(uploadResult.public_id, { resource_type: resourceType })
+      .catch(() => {});
+    res.status(500).json({
+      message: "Failed to save recipe after upload",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
     });
   }
@@ -97,17 +118,7 @@ export const addRecipeMedia = async (req, res) => {
 
 // DELETE /api/recipes/:id/media/:mediaId
 export const deleteRecipeMedia = async (req, res) => {
-  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
-    return res.status(400).json({ message: "Invalid recipe ID" });
-  }
-
-  const recipe = await Recipe.findById(req.params.id);
-  if (!recipe) {
-    return res.status(404).json({ message: "Recipe not found" });
-  }
-  if (recipe.user.toString() !== req.user._id.toString()) {
-    return res.status(403).json({ message: "Not authorized" });
-  }
+  const recipe = req.recipe;
 
   const mediaItem = recipe.media.id(req.params.mediaId);
   if (!mediaItem) {

@@ -80,7 +80,9 @@ export const deleteRecipe = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    await Promise.all(
+    // Best-effort: a Cloudinary hiccup on one asset shouldn't block the
+    // user from deleting their own recipe.
+    await Promise.allSettled(
       recipe.media.map((item) =>
         cloudinary.uploader.destroy(item.publicId, {
           resource_type: item.type === "video" ? "video" : "image",
@@ -93,7 +95,10 @@ export const deleteRecipe = async (req, res) => {
 
     res.json({ message: "Recipe deleted" });
   } catch (err) {
-    res.status(500).json({ message: "Failed to delete recipe", error: err.message });
+    res.status(500).json({
+      message: "Failed to delete recipe",
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
   }
 };
 

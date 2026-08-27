@@ -13,9 +13,53 @@ export const ALLOWED_MIME_TYPES = {
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50MB
 
+// Enforces the per-type size limit while the file is still streaming in,
+// so an oversized image is rejected as soon as it crosses 8MB instead of
+// being fully buffered up to the (larger) video ceiling first.
+class LimitedMemoryStorage {
+  _handleFile(req, file, cb) {
+    const mediaType = ALLOWED_MIME_TYPES[file.mimetype];
+    const limit = mediaType === "video" ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    const chunks = [];
+    let size = 0;
+    let settled = false;
+
+    const finish = (err, result) => {
+      if (settled) return;
+      settled = true;
+      cb(err, result);
+    };
+
+    file.stream.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        file.stream.destroy();
+        finish(
+          new Error(
+            `File exceeds the ${Math.round(limit / (1024 * 1024))}MB limit for this file type`
+          )
+        );
+        return;
+      }
+      chunks.push(chunk);
+    });
+
+    file.stream.on("end", () => {
+      finish(null, { buffer: Buffer.concat(chunks), size });
+    });
+
+    file.stream.on("error", (err) => {
+      finish(err);
+    });
+  }
+
+  _removeFile(req, file, cb) {
+    cb(null);
+  }
+}
+
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_VIDEO_BYTES }, // hard ceiling; per-type limit enforced in the controller
+  storage: new LimitedMemoryStorage(),
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_MIME_TYPES[file.mimetype]) {
       return cb(new Error("Unsupported file type"));
