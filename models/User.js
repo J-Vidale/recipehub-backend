@@ -30,6 +30,8 @@ const userSchema = new mongoose.Schema(
     ],
     followerCount: { type: Number, default: 0 },
     followingCount: { type: Number, default: 0 },
+    avatarUrl: { type: String, default: null },
+    avatarPublicId: { type: String, default: null },
   },
   {
     timestamps: true,

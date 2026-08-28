@@ -24,7 +24,7 @@ export const getNotifications = async (req, res) => {
   const notifications = await Notification.find(query)
     .sort({ _id: -1 })
     .limit(limit + 1)
-    .populate("actor", "username")
+    .populate("actor", "username avatarUrl")
     .populate("recipe", "title")
     .lean();
 

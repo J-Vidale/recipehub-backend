@@ -100,7 +100,7 @@ export const getAllRecipes = async (req, res) => {
         .sort({ _id: -1 })
         .skip(skip)
         .limit(parsedLimit + 1)
-        .populate("user", "username")
+        .populate("user", "username avatarUrl")
         .lean();
 
       const hasMore = recipes.length > parsedLimit;
@@ -149,7 +149,7 @@ export const getAllRecipes = async (req, res) => {
 
     const hasMore = recipes.length > parsedLimit;
     const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
-    await Recipe.populate(page, { path: "user", select: "username" });
+    await Recipe.populate(page, { path: "user", select: "username avatarUrl" });
 
     const responseBody = { recipes: page, page: parsedPage, hasMore };
     setCached(cacheKey, responseBody, DISCOVER_CACHE_TTL_SECONDS);
@@ -188,7 +188,7 @@ export const getFollowingFeed = async (req, res) => {
     const recipes = await Recipe.find(query)
       .sort({ _id: -1 })
       .limit(parsedLimit + 1)
-      .populate("user", "username")
+      .populate("user", "username avatarUrl")
       .lean();
 
     const hasMore = recipes.length > parsedLimit;
@@ -220,7 +220,7 @@ export const getSingleRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
   try {
-    const recipe = await Recipe.findById(req.params.id).populate("user", "username").lean();
+    const recipe = await Recipe.findById(req.params.id).populate("user", "username avatarUrl").lean();
     if (!recipe) {
       return res.status(404).json({ message: "Recipe not found" });
     }
@@ -330,7 +330,7 @@ export const getRecipesByTag = async (req, res) => {
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit + 1)
-    .populate("user", "username")
+    .populate("user", "username avatarUrl")
     .lean();
 
   const hasMore = recipes.length > limit;

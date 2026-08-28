@@ -55,7 +55,7 @@ export const getConversations = async (req, res) => {
     .sort({ lastMessageAt: -1 })
     .skip((page - 1) * limit)
     .limit(limit + 1)
-    .populate("participants", "username")
+    .populate("participants", "username avatarUrl")
     .lean();
 
   const hasMore = conversations.length > limit;

@@ -67,7 +67,9 @@ The server will start on `http://localhost:5000`.
 
 ### **User**
 - `GET /api/users/me` — Get current user info (protected)
-- `GET /api/users/:id` — Get a user's public profile (`username`, `followerCount`, `followingCount`, `recipeCount`, `createdAt`)
+- `POST /api/users/me/avatar` — Upload/replace your profile picture (protected, multipart `file` field, image only, 8MB limit). Stored on Cloudinary; replaces the previous avatar if one exists.
+- `DELETE /api/users/me/avatar` — Remove your profile picture (protected)
+- `GET /api/users/:id` — Get a user's public profile (`username`, `avatarUrl`, `followerCount`, `followingCount`, `recipeCount`, `createdAt`)
 - `POST /api/users/:id/follow` — Follow a user (protected, idempotent)
 - `DELETE /api/users/:id/follow` — Unfollow a user (protected, idempotent)
 - `GET /api/users/:id/followers?limit=<n>` — List a user's followers, most recent first (`limit` defaults to 50, max 100)

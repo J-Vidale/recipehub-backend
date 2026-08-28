@@ -103,7 +103,7 @@ export const getFollowers = async (req, res) => {
   const follows = await Follow.find({ following: targetUser._id })
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate("follower", "username")
+    .populate("follower", "username avatarUrl")
     .lean();
   res.json(follows.map((f) => f.follower));
 };
@@ -123,7 +123,7 @@ export const getFollowing = async (req, res) => {
   const follows = await Follow.find({ follower: targetUser._id })
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate("following", "username")
+    .populate("following", "username avatarUrl")
     .lean();
   res.json(follows.map((f) => f.following));
 };

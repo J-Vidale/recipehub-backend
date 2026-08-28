@@ -87,7 +87,7 @@ export const addComment = async (req, res) => {
     });
   }
 
-  const populated = await comment.populate("user", "username");
+  const populated = await comment.populate("user", "username avatarUrl");
   res.status(201).json(populated);
 };
 
@@ -163,7 +163,7 @@ export const getComments = async (req, res) => {
   const comments = await Comment.find({ recipe: recipe._id })
     .sort({ createdAt: 1 })
     .limit(limit)
-    .populate("user", "username")
+    .populate("user", "username avatarUrl")
     .lean();
 
   if (recipe.pinnedComment) {

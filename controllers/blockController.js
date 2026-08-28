@@ -67,7 +67,7 @@ export const unblockUser = async (req, res) => {
 export const getBlockedUsers = async (req, res) => {
   const blocks = await Block.find({ blocker: req.user._id })
     .sort({ _id: -1 })
-    .populate("blocked", "username")
+    .populate("blocked", "username avatarUrl")
     .lean();
   res.json(blocks.map((b) => b.blocked));
 };
