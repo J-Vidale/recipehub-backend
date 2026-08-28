@@ -30,12 +30,12 @@ export const registerUser = async (req, res) => {
         .json({ message: "Password must be at least 6 characters" });
     }
 
-    const existingEmail = await User.findOne({ email });
+    const existingEmail = await User.findOne({ email }).lean();
     if (existingEmail) {
       return res.status(400).json({ message: "Email already in use" });
     }
 
-    const existingUsername = await User.findOne({ username });
+    const existingUsername = await User.findOne({ username }).lean();
     if (existingUsername) {
       return res.status(400).json({ message: "Username already in use" });
     }

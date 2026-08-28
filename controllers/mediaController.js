@@ -14,7 +14,15 @@ const MAX_PHOTOS = 5;
 const uploadBufferToCloudinary = (buffer, resourceType) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
-      { resource_type: resourceType, folder: "recipehub" },
+      {
+        resource_type: resourceType,
+        folder: "recipehub",
+        // Bake automatic format (WebP/AVIF where supported) and quality
+        // negotiation into the stored asset, so every consumer of
+        // media.url gets an optimized delivery URL for free - no per-call
+        // transformation string needed anywhere media is read.
+        transformation: [{ fetch_format: "auto", quality: "auto" }],
+      },
       (error, result) => {
         if (error) return reject(error);
         resolve(result);

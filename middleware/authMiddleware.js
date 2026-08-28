@@ -10,7 +10,7 @@ export const protect = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    req.user = await User.findById(decoded.id).select('-password').lean();
     if (!req.user) {
       return res.status(401).json({ message: 'User not found' });
     }
@@ -32,7 +32,7 @@ export const optionalAuth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    req.user = await User.findById(decoded.id).select('-password').lean();
   } catch (err) {
     // Invalid/expired token on a public endpoint — proceed as a guest.
   }

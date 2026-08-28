@@ -93,7 +93,8 @@ export const getAllRecipes = async (req, res) => {
         .sort({ _id: -1 })
         .skip(skip)
         .limit(parsedLimit + 1)
-        .populate("user", "username");
+        .populate("user", "username")
+        .lean();
 
       const hasMore = recipes.length > parsedLimit;
       return res.json({
@@ -171,7 +172,8 @@ export const getFollowingFeed = async (req, res) => {
     const recipes = await Recipe.find(query)
       .sort({ _id: -1 })
       .limit(parsedLimit + 1)
-      .populate("user", "username");
+      .populate("user", "username")
+      .lean();
 
     const hasMore = recipes.length > parsedLimit;
     const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
@@ -189,7 +191,8 @@ export const getMyRecipes = async (req, res) => {
   const recipes = await Recipe.find({ user: req.user._id })
     .sort({ _id: -1 })
     .skip(skip)
-    .limit(limit + 1);
+    .limit(limit + 1)
+    .lean();
 
   const hasMore = recipes.length > limit;
   res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
@@ -201,7 +204,7 @@ export const getSingleRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
   try {
-    const recipe = await Recipe.findById(req.params.id).populate("user", "username");
+    const recipe = await Recipe.findById(req.params.id).populate("user", "username").lean();
     if (!recipe) {
       return res.status(404).json({ message: "Recipe not found" });
     }
@@ -242,7 +245,7 @@ export const updateRecipe = async (req, res) => {
 // DELETE /api/recipes/:id
 export const deleteRecipe = async (req, res) => {
   try {
-    const recipe = await Recipe.findById(req.params.id);
+    const recipe = await Recipe.findById(req.params.id).lean();
 
     if (!recipe) {
       return res.status(404).json({ message: "Recipe not found" });
@@ -291,7 +294,8 @@ export const getRecipesByUser = async (req, res) => {
   const recipes = await Recipe.find({ user: userId })
     .sort({ _id: -1 })
     .skip(skip)
-    .limit(limit + 1);
+    .limit(limit + 1)
+    .lean();
 
   const hasMore = recipes.length > limit;
   res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
@@ -301,7 +305,7 @@ export const getRecipesByUser = async (req, res) => {
 export const getSavedRecipes = async (req, res) => {
   try {
     // This assumes you have a "savedRecipes" field on the User model that is an array of Recipe IDs
-    const user = await User.findById(req.user._id).populate("savedRecipes");
+    const user = await User.findById(req.user._id).populate("savedRecipes").lean();
     res.json(user.savedRecipes || []);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch saved recipes" });

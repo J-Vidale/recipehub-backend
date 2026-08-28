@@ -14,7 +14,7 @@ export const addComment = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
 
-  const recipe = await Recipe.findById(req.params.id);
+  const recipe = await Recipe.findById(req.params.id).lean();
   if (!recipe) {
     return res.status(404).json({ message: "Recipe not found" });
   }
@@ -34,7 +34,7 @@ export const addComment = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(parentComment)) {
       return res.status(400).json({ message: "Invalid parent comment ID" });
     }
-    const parent = await Comment.findById(parentComment);
+    const parent = await Comment.findById(parentComment).lean();
     if (!parent) {
       return res.status(404).json({ message: "Parent comment not found" });
     }
@@ -82,7 +82,7 @@ export const pinComment = async (req, res) => {
     return res.status(403).json({ message: "Not authorized" });
   }
 
-  const comment = await Comment.findById(req.params.commentId);
+  const comment = await Comment.findById(req.params.commentId).lean();
   if (!comment || comment.recipe.toString() !== recipe._id.toString()) {
     return res.status(404).json({ message: "Comment not found" });
   }
@@ -124,7 +124,7 @@ export const getComments = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
 
-  const recipe = await Recipe.findById(req.params.id);
+  const recipe = await Recipe.findById(req.params.id).lean();
   if (!recipe) {
     return res.status(404).json({ message: "Recipe not found" });
   }
@@ -136,7 +136,8 @@ export const getComments = async (req, res) => {
   const comments = await Comment.find({ recipe: recipe._id })
     .sort({ createdAt: 1 })
     .limit(limit)
-    .populate("user", "username");
+    .populate("user", "username")
+    .lean();
 
   if (recipe.pinnedComment) {
     const pinnedId = recipe.pinnedComment.toString();
@@ -159,12 +160,12 @@ export const deleteComment = async (req, res) => {
     return res.status(400).json({ message: "Invalid ID" });
   }
 
-  const recipe = await Recipe.findById(req.params.id);
+  const recipe = await Recipe.findById(req.params.id).lean();
   if (!recipe) {
     return res.status(404).json({ message: "Recipe not found" });
   }
 
-  const comment = await Comment.findById(req.params.commentId);
+  const comment = await Comment.findById(req.params.commentId).lean();
   if (!comment || comment.recipe.toString() !== recipe._id.toString()) {
     return res.status(404).json({ message: "Comment not found" });
   }
@@ -175,7 +176,7 @@ export const deleteComment = async (req, res) => {
     return res.status(403).json({ message: "Not authorized" });
   }
 
-  const replies = await Comment.find({ parentComment: comment._id });
+  const replies = await Comment.find({ parentComment: comment._id }).lean();
   const commentIds = [comment._id, ...replies.map((r) => r._id)];
   const deletedCount = commentIds.length;
 

@@ -5,7 +5,7 @@ import Follow from '../models/Follow.js';
 
 // Get logged-in user info
 export const getMe = async (req, res) => {
-  const user = await User.findById(req.user.id).select('-password');
+  const user = await User.findById(req.user.id).select('-password').lean();
   res.json(user);
 };
 
@@ -15,9 +15,9 @@ export const getUserProfile = async (req, res) => {
     return res.status(400).json({ message: 'Invalid user ID' });
   }
 
-  const user = await User.findById(req.params.id).select(
-    'username followerCount followingCount createdAt'
-  );
+  const user = await User.findById(req.params.id)
+    .select('username followerCount followingCount createdAt')
+    .lean();
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }

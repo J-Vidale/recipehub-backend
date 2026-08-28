@@ -12,7 +12,7 @@ export const followUser = async (req, res) => {
     return res.status(400).json({ message: "You cannot follow yourself" });
   }
 
-  const targetUser = await User.findById(req.params.id);
+  const targetUser = await User.findById(req.params.id).lean();
   if (!targetUser) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -28,7 +28,7 @@ export const followUser = async (req, res) => {
     // Already following - idempotent.
   }
 
-  const updatedTarget = await User.findById(targetUser._id).select("followerCount");
+  const updatedTarget = await User.findById(targetUser._id).select("followerCount").lean();
   res.json({ followerCount: updatedTarget.followerCount, followingByMe: true });
 };
 
@@ -38,7 +38,7 @@ export const unfollowUser = async (req, res) => {
     return res.status(400).json({ message: "Invalid user ID" });
   }
 
-  const targetUser = await User.findById(req.params.id);
+  const targetUser = await User.findById(req.params.id).lean();
   if (!targetUser) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -46,7 +46,7 @@ export const unfollowUser = async (req, res) => {
   const deleted = await Follow.findOneAndDelete({
     follower: req.user._id,
     following: targetUser._id,
-  });
+  }).lean();
 
   if (deleted) {
     await User.updateOne(
@@ -59,7 +59,7 @@ export const unfollowUser = async (req, res) => {
     );
   }
 
-  const updatedTarget = await User.findById(targetUser._id).select("followerCount");
+  const updatedTarget = await User.findById(targetUser._id).select("followerCount").lean();
   res.json({ followerCount: updatedTarget.followerCount, followingByMe: false });
 };
 
@@ -78,7 +78,7 @@ export const getFollowers = async (req, res) => {
     return res.status(400).json({ message: "Invalid user ID" });
   }
 
-  const targetUser = await User.findById(req.params.id);
+  const targetUser = await User.findById(req.params.id).lean();
   if (!targetUser) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -87,7 +87,8 @@ export const getFollowers = async (req, res) => {
   const follows = await Follow.find({ following: targetUser._id })
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate("follower", "username");
+    .populate("follower", "username")
+    .lean();
   res.json(follows.map((f) => f.follower));
 };
 
@@ -97,7 +98,7 @@ export const getFollowing = async (req, res) => {
     return res.status(400).json({ message: "Invalid user ID" });
   }
 
-  const targetUser = await User.findById(req.params.id);
+  const targetUser = await User.findById(req.params.id).lean();
   if (!targetUser) {
     return res.status(404).json({ message: "User not found" });
   }
@@ -106,6 +107,7 @@ export const getFollowing = async (req, res) => {
   const follows = await Follow.find({ follower: targetUser._id })
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate("following", "username");
+    .populate("following", "username")
+    .lean();
   res.json(follows.map((f) => f.following));
 };
