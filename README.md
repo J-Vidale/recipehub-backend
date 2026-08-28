@@ -45,7 +45,10 @@ PORT=5000
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
+REDIS_URL=your_redis_connection_string
 ```
+
+`REDIS_URL` is optional. If it's unset, or Redis is unreachable, the app runs exactly as it would with it — caching is a pure performance layer, never a hard dependency. See "Caching" below.
 
 ### Running the Server
 
@@ -124,6 +127,31 @@ Notifications are created for likes, follows, comments, replies, and shares — 
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories
 - `GET /api/meals?search=chicken` — Search meals from TheMealDB
+
+---
+
+## Caching
+
+`GET /api/recipes` (the discover/trending feed, the most expensive read in
+the app — a full-collection aggregation) is cached in Redis for 60 seconds,
+keyed by page and limit. That TTL is a deliberate choice, not a compromise:
+the trending score is itself a live, shifting approximation (see the feed's
+design doc), so a cache briefly serving a 60-second-old ranking is no less
+"correct" than computing it fresh on every request. There is no write-time
+cache invalidation — engagement changes the ranking gradually, and letting
+the cache simply expire is standard practice for a trending feed.
+
+Caching is entirely optional infrastructure:
+- No `REDIS_URL` set → the app runs with caching disabled, no error, no
+  degraded behavior beyond the discover feed hitting MongoDB every time.
+- `REDIS_URL` set but unreachable → the same: every cache operation fails
+  silently (logged, not thrown) and falls through to hitting MongoDB
+  directly. Connection attempts use aggressive timeouts (500ms connect,
+  200ms per command, 2 retries max) so a dead cache can never make a
+  request slower than having no cache at all.
+
+To enable it, provision a Redis instance (Render's Redis add-on, Upstash,
+or any Redis-compatible host) and set `REDIS_URL` to its connection string.
 
 ---
 

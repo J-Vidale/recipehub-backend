@@ -10,6 +10,9 @@ import Share from "../models/Share.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 import { parseHashtags } from "../utils/parseHashtags.js";
+import { getCached, setCached } from "../utils/cache.js";
+
+const DISCOVER_CACHE_TTL_SECONDS = 60;
 
 const parsePagination = (query, defaultLimit = 20, maxLimit = 50) => {
   let page = parseInt(query.page, 10);
@@ -108,6 +111,12 @@ export const getAllRecipes = async (req, res) => {
       });
     }
 
+    const cacheKey = `discover:page=${parsedPage}:limit=${parsedLimit}`;
+    const cached = await getCached(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const recipes = await Recipe.aggregate([
       {
         $addFields: {
@@ -142,7 +151,9 @@ export const getAllRecipes = async (req, res) => {
     const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
     await Recipe.populate(page, { path: "user", select: "username" });
 
-    res.json({ recipes: page, page: parsedPage, hasMore });
+    const responseBody = { recipes: page, page: parsedPage, hasMore };
+    setCached(cacheKey, responseBody, DISCOVER_CACHE_TTL_SECONDS);
+    res.json(responseBody);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch recipes" });
   }
