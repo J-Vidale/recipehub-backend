@@ -90,7 +90,7 @@ Blocking (either direction) prevents following and commenting between the two us
 - `GET /api/recipes/user/:userId?page=<n>&limit=<n>` — Get a user's recipes, paginated. Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/tag/:tag?page=<n>&limit=<n>` — Get recipes tagged with `#tag`, paginated. Response: `{ recipes, page, hasMore, tag }`.
 - `GET /api/recipes/:id` — Get a single recipe
-- `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`. `#hashtags` written in `instructions` are automatically parsed into the recipe's `tags` (max 30, deduped, case-insensitive) — no separate tags field to fill in.
+- `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`. `category` is free text, not restricted to the curated list (see Categories & Meals below) — trimmed, capped at 40 characters, and rejected with 400 if it contains profanity/slurs. `#hashtags` written in `instructions` are automatically parsed into the recipe's `tags` (max 30, deduped, case-insensitive) — no separate tags field to fill in.
 - `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list. Updating `instructions` re-parses its hashtags.
 - `DELETE /api/recipes/:id` — Delete your recipe (protected)
 - `GET /api/recipes/saved` — Get your saved recipes (protected)
@@ -135,7 +135,8 @@ Notifications are created for likes, follows, comments, replies, and shares — 
 - `POST /api/conversations/:id/read` — Mark all of the other participant's messages in a conversation as read (protected, participants only).
 
 ### **Categories & Meals**
-- `GET /api/categories` — Get static list of categories
+- `GET /api/categories` — Get the curated list of categories
+- `GET /api/categories/suggest?q=<text>` — Autocomplete suggestions for the recipe category field. Matches both the curated list and categories other users have actually used (an address-autocomplete-style narrowing list), most-used first. Response: `{ curated: string[], community: { name, count }[] }`. A category is never required to match a suggestion — recipes accept any free-text category (moderated, see above).
 - `GET /api/meals?search=chicken` — Search meals from TheMealDB
 
 ---

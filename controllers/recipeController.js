@@ -11,6 +11,7 @@ import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 import { parseHashtags } from "../utils/parseHashtags.js";
 import { getCached, setCached } from "../utils/cache.js";
+import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
 
@@ -48,6 +49,28 @@ const validateIngredients = (ingredients) => {
   };
 };
 
+// A category may be picked from the curated/community suggestions or
+// typed as a custom name (see GET /api/categories/suggest) - either way
+// it's just a string, so it's moderated here rather than validated
+// against a fixed list.
+const sanitizeCategory = (rawCategory) => {
+  if (rawCategory === undefined || rawCategory === null) {
+    return { value: undefined };
+  }
+  if (typeof rawCategory !== "string") {
+    return { error: "Category must be text" };
+  }
+  const trimmed = rawCategory.trim().slice(0, MAX_CATEGORY_LENGTH);
+  if (!trimmed) {
+    return { value: "" };
+  }
+  const moderationError = moderateShortText(trimmed);
+  if (moderationError) {
+    return { error: moderationError };
+  }
+  return { value: trimmed };
+};
+
 // POST /api/recipes
 export const createRecipe = async (req, res) => {
   const { title, instructions, category, ingredients } = req.body;
@@ -65,10 +88,15 @@ export const createRecipe = async (req, res) => {
     cleanIngredients = cleaned;
   }
 
+  const { error: categoryError, value: cleanCategory } = sanitizeCategory(category);
+  if (categoryError) {
+    return res.status(400).json({ message: categoryError });
+  }
+
   const recipe = await Recipe.create({
     title: title.trim(),
     instructions,
-    category,
+    category: cleanCategory,
     ingredients: cleanIngredients,
     tags: parseHashtags(instructions),
     user: req.user._id,
@@ -247,7 +275,13 @@ export const updateRecipe = async (req, res) => {
     recipe.instructions = req.body.instructions;
     recipe.tags = parseHashtags(req.body.instructions);
   }
-  if (req.body.category !== undefined) recipe.category = req.body.category;
+  if (req.body.category !== undefined) {
+    const { error: categoryError, value: cleanCategory } = sanitizeCategory(req.body.category);
+    if (categoryError) {
+      return res.status(400).json({ message: categoryError });
+    }
+    recipe.category = cleanCategory;
+  }
 
   if (req.body.ingredients !== undefined) {
     const { error, cleaned } = validateIngredients(req.body.ingredients);

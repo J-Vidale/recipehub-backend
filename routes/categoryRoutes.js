@@ -1,26 +1,9 @@
 import express from "express";
+import { getCategories, suggestCategories } from "../controllers/categoryController.js";
 
 const router = express.Router();
 
-// Static categories
-const categories = [
-  "Beef",
-  "Chicken",
-  "Dessert",
-  "Lamb",
-  "Pasta",
-  "Pork",
-  "Seafood",
-  "Side",
-  "Starter",
-  "Vegan",
-  "Vegetarian",
-  "Breakfast",
-  "Goat",
-];
-
-router.get("/", (req, res) => {
-  res.json(categories);
-});
+router.get("/", getCategories);
+router.get("/suggest", suggestCategories);
 
 export default router;
