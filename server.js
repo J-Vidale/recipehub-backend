@@ -1,4 +1,5 @@
 import express from "express";
+import http from "http";
 import dotenv from "dotenv";
 import cors from "cors";
 import compression from "compression";
@@ -6,6 +7,7 @@ import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import connectDB from "./config/db.js";
+import { initSocket } from "./config/socket.js";
 import userRoutes from "./routes/userRoutes.js";
 import followRoutes from "./routes/followRoutes.js";
 import recipeRoutes from "./routes/recipeRoutes.js";
@@ -78,6 +80,11 @@ app.use(errorHandler);
 // Server
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
+// Socket.IO needs to attach to the raw HTTP server, not the Express app
+// directly - app.listen() creates one internally but doesn't expose it.
+const httpServer = http.createServer(app);
+initSocket(httpServer, allowedOrigins);
+
+httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

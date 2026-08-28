@@ -130,6 +130,30 @@ Notifications are created for likes, follows, comments, replies, and shares — 
 
 ---
 
+## Real-time
+
+Socket.IO is attached to the same HTTP server (no separate port or
+service). Clients authenticate the socket connection with the same JWT
+used for REST requests (`socket.handshake.auth.token`); each authenticated
+socket joins a room named `user:<their user ID>`, so any part of the
+backend can push an event to a specific user with a single call:
+`emitToUser(userId, event, payload)` (`config/socket.js`).
+
+Currently used for one thing: `notification:new` is emitted to the
+recipient the moment a notification is created (`utils/notify.js`), so a
+connected client sees a new like/follow/comment/reply/share without
+waiting for the next poll.
+
+This is deliberately treated as best-effort, not guaranteed delivery.
+Render's free tier sleeps the service after inactivity, and sleeping drops
+every open connection with no client-side warning — so a socket can (and
+will) disconnect unpredictably. Socket.IO's client-side auto-reconnect
+handles getting back online; the notification bell's existing poll
+(`GET /notifications/unread-count` every 45s) stays in place as the
+fallback that guarantees eventual consistency no matter what the socket
+connection is doing. Real-time is a latency improvement on top of that
+guarantee, not a replacement for it.
+
 ## Caching
 
 `GET /api/recipes` (the discover/trending feed, the most expensive read in
