@@ -96,6 +96,14 @@ The server will start on `http://localhost:5000`.
 - `POST /api/comments/:commentId/like` — Like a comment (protected, idempotent)
 - `DELETE /api/comments/:commentId/like` — Unlike a comment (protected, idempotent)
 
+### **Notifications**
+- `GET /api/notifications?cursor=<id>&limit=<n>` — List your notifications, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Response: `{ notifications, nextCursor }`.
+- `GET /api/notifications/unread-count` — Get your unread notification count (protected). Response: `{ count }`.
+- `POST /api/notifications/:id/read` — Mark one notification as read (protected, owner only).
+- `POST /api/notifications/read-all` — Mark all of your notifications as read (protected).
+
+Notifications are created for likes, follows, comments, and replies — never for your own actions on your own content. A recipe like notifies the recipe's owner, a follow notifies the person followed, a top-level comment notifies the recipe's owner, and a reply notifies the parent comment's author.
+
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories
 - `GET /api/meals?search=chicken` — Search meals from TheMealDB

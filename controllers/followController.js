@@ -2,6 +2,7 @@
 import mongoose from "mongoose";
 import User from "../models/User.js";
 import Follow from "../models/Follow.js";
+import { createNotification } from "../utils/notify.js";
 
 // POST /api/users/:id/follow
 export const followUser = async (req, res) => {
@@ -17,6 +18,7 @@ export const followUser = async (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
 
+  let created = true;
   try {
     await Follow.create({ follower: req.user._id, following: targetUser._id });
     await User.updateOne({ _id: targetUser._id }, { $inc: { followerCount: 1 } });
@@ -26,6 +28,15 @@ export const followUser = async (req, res) => {
       throw err;
     }
     // Already following - idempotent.
+    created = false;
+  }
+
+  if (created) {
+    createNotification({
+      recipient: targetUser._id,
+      actor: req.user._id,
+      type: "follow",
+    });
   }
 
   const updatedTarget = await User.findById(targetUser._id).select("followerCount").lean();

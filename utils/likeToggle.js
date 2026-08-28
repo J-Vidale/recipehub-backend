@@ -12,14 +12,14 @@ export async function addLike({ LikeModel, likeQuery, CountModel, countId }) {
       { $inc: { likeCount: 1 } },
       { new: true }
     );
-    return { likeCount: updated ? updated.likeCount : 0, likedByMe: true };
+    return { likeCount: updated ? updated.likeCount : 0, likedByMe: true, created: true };
   } catch (err) {
     if (err.code !== 11000) {
       throw err;
     }
     // Already liked - idempotent; re-read the current count.
     const current = await CountModel.findById(countId).select("likeCount");
-    return { likeCount: current.likeCount, likedByMe: true };
+    return { likeCount: current.likeCount, likedByMe: true, created: false };
   }
 }
 
