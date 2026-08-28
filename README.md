@@ -104,6 +104,9 @@ The server will start on `http://localhost:5000`.
 
 Notifications are created for likes, follows, comments, and replies — never for your own actions on your own content. A recipe like notifies the recipe's owner, a follow notifies the person followed, a top-level comment notifies the recipe's owner, and a reply notifies the parent comment's author.
 
+### **Search**
+- `GET /api/search?q=<query>&limit=<n>` — Combined search across recipe titles and usernames, case-insensitive substring match. `limit` applies to each list independently (defaults to 10, max 25). Response: `{ recipes, users }`.
+
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories
 - `GET /api/meals?search=chicken` — Search meals from TheMealDB
