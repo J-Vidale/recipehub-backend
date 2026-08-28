@@ -110,8 +110,8 @@ You can deploy this backend to [Render](https://render.com/) or any Node.js host
 1. Push your code to GitHub.
 2. Create a new Web Service on Render, connect your repo.
 3. Set build command: `npm install`
-4. Set start command: `npm run dev` or `node server.js`
-5. Add environment variables (`MONGO_URI`, `JWT_SECRET`, `PORT`)
+4. Set start command: `npm start` (do **not** use `npm run dev` in production — that runs `nodemon`, a dev-only file watcher)
+5. Add environment variables (`MONGO_URI`, `JWT_SECRET`, `PORT`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)
 6. Deploy!
 
 ---
