@@ -24,6 +24,7 @@ const recipeSchema = new mongoose.Schema(
       type: String,
     },
     ingredients: [ingredientSchema],
+    tags: [{ type: String, trim: true, lowercase: true }],
     media: [
       {
         type: {
@@ -46,5 +47,6 @@ const recipeSchema = new mongoose.Schema(
 );
 
 recipeSchema.index({ user: 1, _id: -1 });
+recipeSchema.index({ tags: 1, _id: -1 });
 
 export default mongoose.model("Recipe", recipeSchema);

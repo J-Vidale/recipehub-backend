@@ -8,6 +8,7 @@ import {
   updateRecipe,
   deleteRecipe,
   getRecipesByUser,
+  getRecipesByTag,
   getSavedRecipes,
   saveRecipe,
   unsaveRecipe,
@@ -29,6 +30,7 @@ const router = express.Router();
 
 router.get("/saved", protect, getSavedRecipes);
 router.get("/user/:userId", getRecipesByUser);
+router.get("/tag/:tag", getRecipesByTag);
 
 router
   .route("/")

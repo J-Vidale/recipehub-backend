@@ -83,9 +83,10 @@ Blocking (either direction) prevents following and commenting between the two us
 - `GET /api/recipes/feed?cursor=<recipeId>&limit=<n>` — Following feed: recipes from users you follow, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Response: `{ recipes, nextCursor }`.
 - `GET /api/recipes/mine?page=<n>&limit=<n>` — Get your recipes, paginated (protected). Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/user/:userId?page=<n>&limit=<n>` — Get a user's recipes, paginated. Response: `{ recipes, page, hasMore }`.
+- `GET /api/recipes/tag/:tag?page=<n>&limit=<n>` — Get recipes tagged with `#tag`, paginated. Response: `{ recipes, page, hasMore, tag }`.
 - `GET /api/recipes/:id` — Get a single recipe
-- `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`.
-- `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list.
+- `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`. `#hashtags` written in `instructions` are automatically parsed into the recipe's `tags` (max 30, deduped, case-insensitive) — no separate tags field to fill in.
+- `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list. Updating `instructions` re-parses its hashtags.
 - `DELETE /api/recipes/:id` — Delete your recipe (protected)
 - `GET /api/recipes/saved` — Get your saved recipes (protected)
 - `POST /api/recipes/save/:recipeId` — Save a recipe (protected)
@@ -116,6 +117,9 @@ Notifications are created for likes, follows, comments, replies, and shares — 
 
 ### **Search**
 - `GET /api/search?q=<query>&limit=<n>` — Combined search across recipe titles and usernames, case-insensitive substring match. `limit` applies to each list independently (defaults to 10, max 25). Response: `{ recipes, users }`.
+
+### **Tags**
+- `GET /api/tags/popular?limit=<n>` — Most-used hashtags across all recipes, most popular first (`limit` defaults to 20, max 50). Response: `{ tags: [{ tag, count }] }`.
 
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories

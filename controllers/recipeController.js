@@ -9,6 +9,7 @@ import Notification from "../models/Notification.js";
 import Share from "../models/Share.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
+import { parseHashtags } from "../utils/parseHashtags.js";
 
 const parsePagination = (query, defaultLimit = 20, maxLimit = 50) => {
   let page = parseInt(query.page, 10);
@@ -66,6 +67,7 @@ export const createRecipe = async (req, res) => {
     instructions,
     category,
     ingredients: cleanIngredients,
+    tags: parseHashtags(instructions),
     user: req.user._id,
   });
 
@@ -230,7 +232,10 @@ export const updateRecipe = async (req, res) => {
   }
 
   if (req.body.title !== undefined) recipe.title = req.body.title;
-  if (req.body.instructions !== undefined) recipe.instructions = req.body.instructions;
+  if (req.body.instructions !== undefined) {
+    recipe.instructions = req.body.instructions;
+    recipe.tags = parseHashtags(req.body.instructions);
+  }
   if (req.body.category !== undefined) recipe.category = req.body.category;
 
   if (req.body.ingredients !== undefined) {
@@ -304,6 +309,39 @@ export const getRecipesByUser = async (req, res) => {
 
   const hasMore = recipes.length > limit;
   res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
+};
+
+// GET /api/recipes/tag/:tag
+export const getRecipesByTag = async (req, res) => {
+  const tag = req.params.tag.toLowerCase();
+  const { page, limit, skip } = parsePagination(req.query);
+  const recipes = await Recipe.find({ tags: tag })
+    .sort({ _id: -1 })
+    .skip(skip)
+    .limit(limit + 1)
+    .populate("user", "username")
+    .lean();
+
+  const hasMore = recipes.length > limit;
+  res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore, tag });
+};
+
+// GET /api/tags/popular
+export const getPopularTags = async (req, res) => {
+  let limit = parseInt(req.query.limit, 10);
+  if (!Number.isInteger(limit) || limit < 1) limit = 20;
+  limit = Math.min(limit, 50);
+
+  const tags = await Recipe.aggregate([
+    { $match: { tags: { $exists: true, $ne: [] } } },
+    { $unwind: "$tags" },
+    { $group: { _id: "$tags", count: { $sum: 1 } } },
+    { $sort: { count: -1 } },
+    { $limit: limit },
+    { $project: { _id: 0, tag: "$_id", count: 1 } },
+  ]);
+
+  res.json({ tags });
 };
 
 // GET /api/recipes/saved
