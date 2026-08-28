@@ -69,6 +69,14 @@ The server will start on `http://localhost:5000`.
 - `DELETE /api/users/:id/follow` — Unfollow a user (protected, idempotent)
 - `GET /api/users/:id/followers?limit=<n>` — List a user's followers, most recent first (`limit` defaults to 50, max 100)
 - `GET /api/users/:id/following?limit=<n>` — List who a user follows, most recent first (`limit` defaults to 50, max 100)
+- `GET /api/users/blocked` — List users you've blocked (protected)
+- `POST /api/users/:id/block` — Block a user (protected, idempotent). Also severs any existing follow relationship between the two of you in either direction.
+- `DELETE /api/users/:id/block` — Unblock a user (protected, idempotent)
+
+Blocking (either direction) prevents following and commenting between the two users. It does not currently filter blocked users' content out of feeds or search results — that's a larger, documented follow-up, not yet built.
+
+### **Reports**
+- `POST /api/reports` — Report a recipe, user, or comment (protected). Body: `{ targetType: "recipe"|"user"|"comment", targetId, reason }`. Reports are captured for later review; there's no admin/moderation dashboard yet to act on them.
 
 ### **Recipes**
 - `GET /api/recipes?page=<n>&limit=<n>&sort=<newest>` — Discover feed: all recipes ranked by trending score (shares weighted highest, then saves/comments/likes, decayed by age — matching how real platforms weight a share above a like), paginated. `page` defaults to 1, `limit` defaults to 20 (max 50). Pass `sort=newest` for plain chronological order instead. Response: `{ recipes, page, hasMore }`.

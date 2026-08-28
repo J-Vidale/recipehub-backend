@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import Follow from "../models/Follow.js";
 import { createNotification } from "../utils/notify.js";
+import { isBlockedEitherWay } from "../utils/isBlocked.js";
 
 // POST /api/users/:id/follow
 export const followUser = async (req, res) => {
@@ -16,6 +17,10 @@ export const followUser = async (req, res) => {
   const targetUser = await User.findById(req.params.id).lean();
   if (!targetUser) {
     return res.status(404).json({ message: "User not found" });
+  }
+
+  if (await isBlockedEitherWay(req.user._id, targetUser._id)) {
+    return res.status(403).json({ message: "You cannot follow this user" });
   }
 
   let created = true;

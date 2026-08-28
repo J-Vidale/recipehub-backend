@@ -5,6 +5,7 @@ import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
 import Notification from "../models/Notification.js";
 import { createNotification } from "../utils/notify.js";
+import { isBlockedEitherWay } from "../utils/isBlocked.js";
 
 const MAX_TEXT_LENGTH = 1000;
 const MAX_COMMENTS_LIMIT = 100;
@@ -19,6 +20,10 @@ export const addComment = async (req, res) => {
   const recipe = await Recipe.findById(req.params.id).lean();
   if (!recipe) {
     return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  if (await isBlockedEitherWay(req.user._id, recipe.user)) {
+    return res.status(403).json({ message: "You cannot comment on this recipe" });
   }
 
   const { text, parentComment } = req.body;
