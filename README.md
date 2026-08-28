@@ -71,7 +71,7 @@ The server will start on `http://localhost:5000`.
 - `GET /api/users/:id/following?limit=<n>` — List who a user follows, most recent first (`limit` defaults to 50, max 100)
 
 ### **Recipes**
-- `GET /api/recipes?page=<n>&limit=<n>&sort=<newest>` — Discover feed: all recipes ranked by trending score (saves/comments/likes weighted, decayed by age), paginated. `page` defaults to 1, `limit` defaults to 20 (max 50). Pass `sort=newest` for plain chronological order instead. Response: `{ recipes, page, hasMore }`.
+- `GET /api/recipes?page=<n>&limit=<n>&sort=<newest>` — Discover feed: all recipes ranked by trending score (shares weighted highest, then saves/comments/likes, decayed by age — matching how real platforms weight a share above a like), paginated. `page` defaults to 1, `limit` defaults to 20 (max 50). Pass `sort=newest` for plain chronological order instead. Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/feed?cursor=<recipeId>&limit=<n>` — Following feed: recipes from users you follow, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Response: `{ recipes, nextCursor }`.
 - `GET /api/recipes/mine?page=<n>&limit=<n>` — Get your recipes, paginated (protected). Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/user/:userId?page=<n>&limit=<n>` — Get a user's recipes, paginated. Response: `{ recipes, page, hasMore }`.
@@ -86,6 +86,8 @@ The server will start on `http://localhost:5000`.
 - `DELETE /api/recipes/:id/media/:mediaId` — Remove a media item from your recipe (protected)
 - `POST /api/recipes/:id/like` — Like a recipe (protected, idempotent)
 - `DELETE /api/recipes/:id/like` — Unlike a recipe (protected, idempotent)
+- `POST /api/recipes/:id/share` — Share/repost a recipe (protected, idempotent)
+- `DELETE /api/recipes/:id/share` — Undo a share (protected, idempotent)
 - `POST /api/recipes/:id/comments` — Comment on a recipe, or reply to a top-level comment via `parentComment` (protected)
 - `GET /api/recipes/:id/comments` — List a recipe's comments
 - `DELETE /api/recipes/:id/comments/:commentId` — Delete a comment (protected, comment author or recipe owner only)
@@ -102,7 +104,7 @@ The server will start on `http://localhost:5000`.
 - `POST /api/notifications/:id/read` — Mark one notification as read (protected, owner only).
 - `POST /api/notifications/read-all` — Mark all of your notifications as read (protected).
 
-Notifications are created for likes, follows, comments, and replies — never for your own actions on your own content. A recipe like notifies the recipe's owner, a follow notifies the person followed, a top-level comment notifies the recipe's owner, and a reply notifies the parent comment's author.
+Notifications are created for likes, follows, comments, replies, and shares — never for your own actions on your own content. A recipe like or share notifies the recipe's owner, a follow notifies the person followed, a top-level comment notifies the recipe's owner, and a reply notifies the parent comment's author.
 
 ### **Search**
 - `GET /api/search?q=<query>&limit=<n>` — Combined search across recipe titles and usernames, case-insensitive substring match. `limit` applies to each list independently (defaults to 10, max 25). Response: `{ recipes, users }`.

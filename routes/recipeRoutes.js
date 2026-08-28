@@ -15,6 +15,7 @@ import {
 import { addRecipeMedia, deleteRecipeMedia, loadOwnedRecipe } from "../controllers/mediaController.js";
 import { uploadSingleMedia } from "../middleware/uploadMiddleware.js";
 import { likeRecipe, unlikeRecipe } from "../controllers/likeController.js";
+import { shareRecipe, unshareRecipe } from "../controllers/shareController.js";
 import {
   addComment,
   getComments,
@@ -48,6 +49,9 @@ router.delete("/:id/media/:mediaId", protect, loadOwnedRecipe, deleteRecipeMedia
 
 router.post("/:id/like", protect, likeRecipe);
 router.delete("/:id/like", protect, unlikeRecipe);
+
+router.post("/:id/share", protect, shareRecipe);
+router.delete("/:id/share", protect, unshareRecipe);
 
 router.post("/:id/comments", protect, addComment);
 router.get("/:id/comments", getComments);

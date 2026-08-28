@@ -6,6 +6,7 @@ import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
 import Follow from "../models/Follow.js";
 import Notification from "../models/Notification.js";
+import Share from "../models/Share.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 
@@ -119,6 +120,7 @@ export const getAllRecipes = async (req, res) => {
             $divide: [
               {
                 $add: [
+                  { $multiply: ["$shareCount", 4] },
                   { $multiply: ["$saveCount", 3] },
                   { $multiply: ["$commentCount", 2] },
                   { $multiply: ["$likeCount", 1] },
@@ -269,6 +271,7 @@ export const deleteRecipe = async (req, res) => {
     const commentIds = await Comment.find({ recipe: recipe._id }).distinct("_id");
     await CommentLike.deleteMany({ comment: { $in: commentIds } });
     await Like.deleteMany({ recipe: recipe._id });
+    await Share.deleteMany({ recipe: recipe._id });
     await Comment.deleteMany({ recipe: recipe._id });
     await Notification.deleteMany({ recipe: recipe._id });
     await User.updateMany(
