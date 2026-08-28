@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Recipe from '../models/Recipe.js';
+import Follow from '../models/Follow.js';
 
 // Get logged-in user info
 export const getMe = async (req, res) => {
@@ -23,12 +24,18 @@ export const getUserProfile = async (req, res) => {
 
   const recipeCount = await Recipe.countDocuments({ user: user._id });
 
+  let followingByMe = false;
+  if (req.user && req.user._id.toString() !== user._id.toString()) {
+    followingByMe = await Follow.exists({ follower: req.user._id, following: user._id });
+  }
+
   res.json({
     _id: user._id,
     username: user.username,
     followerCount: user.followerCount,
     followingCount: user.followingCount,
     recipeCount,
+    followingByMe: Boolean(followingByMe),
     createdAt: user.createdAt,
   });
 };

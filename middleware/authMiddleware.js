@@ -19,3 +19,22 @@ export const protect = async (req, res, next) => {
     res.status(401).json({ message: 'Invalid token' });
   }
 };
+
+// Populates req.user when a valid token is present, but never blocks the
+// request — for endpoints that are public but behave differently for a
+// logged-in viewer (e.g. "do I already follow this person").
+export const optionalAuth = async (req, res, next) => {
+  const token = req.headers.authorization?.startsWith('Bearer')
+    ? req.headers.authorization.split(' ')[1]
+    : null;
+
+  if (!token) return next();
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = await User.findById(decoded.id).select('-password');
+  } catch (err) {
+    // Invalid/expired token on a public endpoint — proceed as a guest.
+  }
+  next();
+};
