@@ -5,6 +5,7 @@ import Like from "../models/Like.js";
 import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
 import Follow from "../models/Follow.js";
+import Notification from "../models/Notification.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 
@@ -269,6 +270,7 @@ export const deleteRecipe = async (req, res) => {
     await CommentLike.deleteMany({ comment: { $in: commentIds } });
     await Like.deleteMany({ recipe: recipe._id });
     await Comment.deleteMany({ recipe: recipe._id });
+    await Notification.deleteMany({ recipe: recipe._id });
     await User.updateMany(
       { savedRecipes: recipe._id },
       { $pull: { savedRecipes: recipe._id } }

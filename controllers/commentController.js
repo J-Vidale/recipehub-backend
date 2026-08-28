@@ -3,6 +3,8 @@ import mongoose from "mongoose";
 import Recipe from "../models/Recipe.js";
 import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
+import Notification from "../models/Notification.js";
+import { createNotification } from "../utils/notify.js";
 
 const MAX_TEXT_LENGTH = 1000;
 const MAX_COMMENTS_LIMIT = 100;
@@ -30,6 +32,7 @@ export const addComment = async (req, res) => {
   }
 
   let parentId = null;
+  let parentAuthor = null;
   if (parentComment) {
     if (!mongoose.Types.ObjectId.isValid(parentComment)) {
       return res.status(400).json({ message: "Invalid parent comment ID" });
@@ -49,6 +52,7 @@ export const addComment = async (req, res) => {
       });
     }
     parentId = parent._id;
+    parentAuthor = parent.user;
   }
 
   const comment = await Comment.create({
@@ -59,6 +63,24 @@ export const addComment = async (req, res) => {
   });
 
   await Recipe.updateOne({ _id: recipe._id }, { $inc: { commentCount: 1 } });
+
+  if (parentAuthor) {
+    createNotification({
+      recipient: parentAuthor,
+      actor: req.user._id,
+      type: "reply",
+      recipe: recipe._id,
+      comment: comment._id,
+    });
+  } else {
+    createNotification({
+      recipient: recipe.user,
+      actor: req.user._id,
+      type: "comment",
+      recipe: recipe._id,
+      comment: comment._id,
+    });
+  }
 
   const populated = await comment.populate("user", "username");
   res.status(201).json(populated);
@@ -181,6 +203,7 @@ export const deleteComment = async (req, res) => {
   const deletedCount = commentIds.length;
 
   await CommentLike.deleteMany({ comment: { $in: commentIds } });
+  await Notification.deleteMany({ comment: { $in: commentIds } });
   await Comment.deleteMany({ _id: { $in: commentIds } });
 
   await Recipe.updateOne(

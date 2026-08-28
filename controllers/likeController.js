@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Recipe from "../models/Recipe.js";
 import Like from "../models/Like.js";
 import { addLike, removeLike } from "../utils/likeToggle.js";
+import { createNotification } from "../utils/notify.js";
 
 // POST /api/recipes/:id/like
 export const likeRecipe = async (req, res) => {
@@ -15,12 +16,21 @@ export const likeRecipe = async (req, res) => {
     return res.status(404).json({ message: "Recipe not found" });
   }
 
-  const result = await addLike({
+  const { created, ...result } = await addLike({
     LikeModel: Like,
     likeQuery: { user: req.user._id, recipe: recipe._id },
     CountModel: Recipe,
     countId: recipe._id,
   });
+
+  if (created) {
+    createNotification({
+      recipient: recipe.user,
+      actor: req.user._id,
+      type: "like",
+      recipe: recipe._id,
+    });
+  }
 
   res.json(result);
 };
