@@ -8,6 +8,17 @@ import Follow from "../models/Follow.js";
 import mongoose from "mongoose";
 import cloudinary from "../config/cloudinary.js";
 
+const parsePagination = (query, defaultLimit = 20, maxLimit = 50) => {
+  let page = parseInt(query.page, 10);
+  if (!Number.isInteger(page) || page < 1) page = 1;
+
+  let limit = parseInt(query.limit, 10);
+  if (!Number.isInteger(limit) || limit < 1) limit = defaultLimit;
+  limit = Math.min(limit, maxLimit);
+
+  return { page, limit, skip: (page - 1) * limit };
+};
+
 const validateIngredients = (ingredients) => {
   if (!Array.isArray(ingredients)) {
     return { error: "Ingredients must be an array" };
@@ -174,8 +185,14 @@ export const getFollowingFeed = async (req, res) => {
 
 // GET /api/recipes/mine
 export const getMyRecipes = async (req, res) => {
-  const recipes = await Recipe.find({ user: req.user._id });
-  res.json(recipes);
+  const { page, limit, skip } = parsePagination(req.query);
+  const recipes = await Recipe.find({ user: req.user._id })
+    .sort({ _id: -1 })
+    .skip(skip)
+    .limit(limit + 1);
+
+  const hasMore = recipes.length > limit;
+  res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
 };
 
 // GET /api/recipes/:id
@@ -184,7 +201,7 @@ export const getSingleRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
   try {
-    const recipe = await Recipe.findById(req.params.id);
+    const recipe = await Recipe.findById(req.params.id).populate("user", "username");
     if (!recipe) {
       return res.status(404).json({ message: "Recipe not found" });
     }
@@ -206,9 +223,9 @@ export const updateRecipe = async (req, res) => {
     return res.status(403).json({ message: "Not authorized" });
   }
 
-  recipe.title = req.body.title || recipe.title;
-  recipe.instructions = req.body.instructions || recipe.instructions;
-  recipe.category = req.body.category || recipe.category;
+  if (req.body.title !== undefined) recipe.title = req.body.title;
+  if (req.body.instructions !== undefined) recipe.instructions = req.body.instructions;
+  if (req.body.category !== undefined) recipe.category = req.body.category;
 
   if (req.body.ingredients !== undefined) {
     const { error, cleaned } = validateIngredients(req.body.ingredients);
@@ -249,6 +266,10 @@ export const deleteRecipe = async (req, res) => {
     await CommentLike.deleteMany({ comment: { $in: commentIds } });
     await Like.deleteMany({ recipe: recipe._id });
     await Comment.deleteMany({ recipe: recipe._id });
+    await User.updateMany(
+      { savedRecipes: recipe._id },
+      { $pull: { savedRecipes: recipe._id } }
+    );
     await Recipe.deleteOne({ _id: recipe._id });
 
     res.json({ message: "Recipe deleted" });
@@ -266,8 +287,14 @@ export const getRecipesByUser = async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     return res.status(400).json({ message: "Invalid user ID" });
   }
-  const recipes = await Recipe.find({ user: userId });
-  res.json(recipes);
+  const { page, limit, skip } = parsePagination(req.query);
+  const recipes = await Recipe.find({ user: userId })
+    .sort({ _id: -1 })
+    .skip(skip)
+    .limit(limit + 1);
+
+  const hasMore = recipes.length > limit;
+  res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
 };
 
 // GET /api/recipes/saved
@@ -283,7 +310,16 @@ export const getSavedRecipes = async (req, res) => {
 
 // Save a recipe
 export const saveRecipe = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.recipeId)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
   try {
+    const recipeExists = await Recipe.exists({ _id: req.params.recipeId });
+    if (!recipeExists) {
+      return res.status(404).json({ message: "Recipe not found" });
+    }
+
     const result = await User.updateOne(
       { _id: req.user._id },
       { $addToSet: { savedRecipes: req.params.recipeId } }

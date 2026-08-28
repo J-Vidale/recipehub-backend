@@ -63,6 +63,15 @@ export const unfollowUser = async (req, res) => {
   res.json({ followerCount: updatedTarget.followerCount, followingByMe: false });
 };
 
+const DEFAULT_LIST_LIMIT = 50;
+const MAX_LIST_LIMIT = 100;
+
+const parseListLimit = (query) => {
+  let limit = parseInt(query.limit, 10);
+  if (!Number.isInteger(limit) || limit < 1) limit = DEFAULT_LIST_LIMIT;
+  return Math.min(limit, MAX_LIST_LIMIT);
+};
+
 // GET /api/users/:id/followers
 export const getFollowers = async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -74,10 +83,11 @@ export const getFollowers = async (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
 
-  const follows = await Follow.find({ following: targetUser._id }).populate(
-    "follower",
-    "username"
-  );
+  const limit = parseListLimit(req.query);
+  const follows = await Follow.find({ following: targetUser._id })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate("follower", "username");
   res.json(follows.map((f) => f.follower));
 };
 
@@ -92,9 +102,10 @@ export const getFollowing = async (req, res) => {
     return res.status(404).json({ message: "User not found" });
   }
 
-  const follows = await Follow.find({ follower: targetUser._id }).populate(
-    "following",
-    "username"
-  );
+  const limit = parseListLimit(req.query);
+  const follows = await Follow.find({ follower: targetUser._id })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate("following", "username");
   res.json(follows.map((f) => f.following));
 };

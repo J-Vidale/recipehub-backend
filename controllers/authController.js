@@ -53,6 +53,10 @@ export const registerUser = async (req, res) => {
       token: generateToken(newUser._id),
     });
   } catch (err) {
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern || {})[0] || "field";
+      return res.status(400).json({ message: `${field} already in use` });
+    }
     res.status(500).json({
       message:
         process.env.NODE_ENV === "development" ? err.message : "Server error",

@@ -1,7 +1,34 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
+import Recipe from '../models/Recipe.js';
 
 // Get logged-in user info
 export const getMe = async (req, res) => {
   const user = await User.findById(req.user.id).select('-password');
   res.json(user);
+};
+
+// GET /api/users/:id — public profile
+export const getUserProfile = async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid user ID' });
+  }
+
+  const user = await User.findById(req.params.id).select(
+    'username followerCount followingCount createdAt'
+  );
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  const recipeCount = await Recipe.countDocuments({ user: user._id });
+
+  res.json({
+    _id: user._id,
+    username: user.username,
+    followerCount: user.followerCount,
+    followingCount: user.followingCount,
+    recipeCount,
+    createdAt: user.createdAt,
+  });
 };

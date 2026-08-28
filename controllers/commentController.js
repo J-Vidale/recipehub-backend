@@ -5,6 +5,8 @@ import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
 
 const MAX_TEXT_LENGTH = 1000;
+const MAX_COMMENTS_LIMIT = 100;
+const DEFAULT_COMMENTS_LIMIT = 50;
 
 // POST /api/recipes/:id/comments
 export const addComment = async (req, res) => {
@@ -127,8 +129,13 @@ export const getComments = async (req, res) => {
     return res.status(404).json({ message: "Recipe not found" });
   }
 
+  let limit = parseInt(req.query.limit, 10);
+  if (!Number.isInteger(limit) || limit < 1) limit = DEFAULT_COMMENTS_LIMIT;
+  limit = Math.min(limit, MAX_COMMENTS_LIMIT);
+
   const comments = await Comment.find({ recipe: recipe._id })
     .sort({ createdAt: 1 })
+    .limit(limit)
     .populate("user", "username");
 
   if (recipe.pinnedComment) {

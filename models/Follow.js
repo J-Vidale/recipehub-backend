@@ -10,5 +10,6 @@ const followSchema = new mongoose.Schema(
 );
 
 followSchema.index({ follower: 1, following: 1 }, { unique: true });
+followSchema.index({ following: 1, createdAt: -1 });
 
 export default mongoose.model("Follow", followSchema);

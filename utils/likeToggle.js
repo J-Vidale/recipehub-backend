@@ -12,7 +12,7 @@ export async function addLike({ LikeModel, likeQuery, CountModel, countId }) {
       { $inc: { likeCount: 1 } },
       { new: true }
     );
-    return { likeCount: updated.likeCount, likedByMe: true };
+    return { likeCount: updated ? updated.likeCount : 0, likedByMe: true };
   } catch (err) {
     if (err.code !== 11000) {
       throw err;

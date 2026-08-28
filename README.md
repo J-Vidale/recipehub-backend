@@ -64,15 +64,17 @@ The server will start on `http://localhost:5000`.
 
 ### **User**
 - `GET /api/users/me` — Get current user info (protected)
+- `GET /api/users/:id` — Get a user's public profile (`username`, `followerCount`, `followingCount`, `recipeCount`, `createdAt`)
 - `POST /api/users/:id/follow` — Follow a user (protected, idempotent)
 - `DELETE /api/users/:id/follow` — Unfollow a user (protected, idempotent)
-- `GET /api/users/:id/followers` — List a user's followers
-- `GET /api/users/:id/following` — List who a user follows
+- `GET /api/users/:id/followers?limit=<n>` — List a user's followers, most recent first (`limit` defaults to 50, max 100)
+- `GET /api/users/:id/following?limit=<n>` — List who a user follows, most recent first (`limit` defaults to 50, max 100)
 
 ### **Recipes**
 - `GET /api/recipes?page=<n>&limit=<n>&sort=<newest>` — Discover feed: all recipes ranked by trending score (saves/comments/likes weighted, decayed by age), paginated. `page` defaults to 1, `limit` defaults to 20 (max 50). Pass `sort=newest` for plain chronological order instead. Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/feed?cursor=<recipeId>&limit=<n>` — Following feed: recipes from users you follow, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Response: `{ recipes, nextCursor }`.
-- `GET /api/recipes/mine` — Get your recipes (protected)
+- `GET /api/recipes/mine?page=<n>&limit=<n>` — Get your recipes, paginated (protected). Response: `{ recipes, page, hasMore }`.
+- `GET /api/recipes/user/:userId?page=<n>&limit=<n>` — Get a user's recipes, paginated. Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/:id` — Get a single recipe
 - `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`.
 - `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list.
