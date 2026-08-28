@@ -33,10 +33,10 @@ export const search = async (req, res) => {
     Recipe.find({ title: pattern })
       .sort({ _id: -1 })
       .limit(limit)
-      .populate("user", "username")
+      .populate("user", "username avatarUrl")
       .lean(),
     User.find({ username: pattern })
-      .select("username followerCount followingCount")
+      .select("username avatarUrl followerCount followingCount")
       .limit(limit)
       .lean(),
   ]);
