@@ -124,6 +124,14 @@ Notifications are created for likes, follows, comments, replies, and shares — 
 ### **Tags**
 - `GET /api/tags/popular?limit=<n>` — Most-used hashtags across all recipes, most popular first (`limit` defaults to 20, max 50). Response: `{ tags: [{ tag, count }] }`.
 
+### **Direct Messages**
+- `POST /api/conversations` — Start (or idempotently re-fetch) a 1:1 conversation with another user (protected). Body: `{ userId }`. Rejected if either user has blocked the other.
+- `GET /api/conversations?page=<n>&limit=<n>` — List your conversations, most recently active first (protected). Response: `{ conversations: [{ _id, otherUser, lastMessageText, lastMessageAt }], page, hasMore }`.
+- `GET /api/conversations/unread-count` — Number of conversations with at least one unread message from the other participant (protected). Response: `{ count }`.
+- `GET /api/conversations/:id/messages?cursor=<messageId>&limit=<n>` — Messages in a conversation, newest first, cursor-paginated (protected, participants only). Response: `{ messages, nextCursor }`.
+- `POST /api/conversations/:id/messages` — Send a message (protected, participants only, rejected if either side has blocked the other). Body: `{ text }` (max 2000 characters). Emits a real-time `message:new` event to the recipient.
+- `POST /api/conversations/:id/read` — Mark all of the other participant's messages in a conversation as read (protected, participants only).
+
 ### **Categories & Meals**
 - `GET /api/categories` — Get static list of categories
 - `GET /api/meals?search=chicken` — Search meals from TheMealDB
@@ -139,10 +147,11 @@ socket joins a room named `user:<their user ID>`, so any part of the
 backend can push an event to a specific user with a single call:
 `emitToUser(userId, event, payload)` (`config/socket.js`).
 
-Currently used for one thing: `notification:new` is emitted to the
-recipient the moment a notification is created (`utils/notify.js`), so a
-connected client sees a new like/follow/comment/reply/share without
-waiting for the next poll.
+Used for two events: `notification:new` (emitted the moment a notification
+is created, `utils/notify.js`) and `message:new` (emitted to the recipient
+the moment a direct message is sent, `controllers/messageController.js`) -
+so a connected client sees a new like/follow/comment/reply/share, or a new
+DM, without waiting on a poll.
 
 This is deliberately treated as best-effort, not guaranteed delivery.
 Render's free tier sleeps the service after inactivity, and sleeping drops
