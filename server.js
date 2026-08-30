@@ -4,8 +4,6 @@ import dotenv from "dotenv";
 import cors from "cors";
 import compression from "compression";
 import helmet from "helmet";
-import path from "path";
-import { fileURLToPath } from "url";
 import connectDB from "./config/db.js";
 import { initSocket } from "./config/socket.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -35,6 +33,14 @@ const allowedOrigins = [
   "https://recipehub-frontend-cgip.onrender.com"
 ];
 
+// Render terminates TLS at its own proxy and forwards to this process, so
+// without this every request carries the proxy's address and req.ip is
+// identical for all clients. That made the auth rate limiter global rather
+// than per-client: 20 failed logins from any one person locked out
+// everybody. Trust exactly one hop - `true` would let a client spoof its
+// own address through X-Forwarded-For.
+app.set("trust proxy", 1);
+
 app.use(helmet());
 app.use(cors({
   origin: allowedOrigins,
@@ -59,21 +65,15 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/meals", mealRoutes);
 app.use("/api/auth", authLimiter, authRoutes);
 
-// Fix for __dirname in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Serve frontend
-if (process.env.NODE_ENV === "production") {
-  app.use(express.static(path.join(__dirname, "/frontend/dist")));
-  app.get("*", (req, res) =>
-    res.sendFile(path.resolve(__dirname, "frontend", "dist", "index.html"))
-  );
-} else {
-  app.get("/", (req, res) => {
-    res.send("API is running...");
-  });
-}
+// This service is API-only: the frontend is deployed separately as its own
+// Render service. An earlier version tried to serve `frontend/dist` from
+// here in production, but that directory does not exist in this repo, so
+// every unmatched path (a mistyped API route included) hit sendFile and
+// failed with ENOENT - returning a 500 and skipping the notFound handler
+// below, which already produces the correct 404.
+app.get("/", (req, res) => {
+  res.json({ status: "ok", service: "recipehub-api" });
+});
 
 // Error handling
 app.use(notFound);
