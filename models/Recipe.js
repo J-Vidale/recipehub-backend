@@ -48,5 +48,8 @@ const recipeSchema = new mongoose.Schema(
 
 recipeSchema.index({ user: 1, _id: -1 });
 recipeSchema.index({ tags: 1, _id: -1 });
+// The category autocomplete groups by category on every keystroke; without
+// this the aggregation's $match scans the whole collection.
+recipeSchema.index({ category: 1 });
 
 export default mongoose.model("Recipe", recipeSchema);

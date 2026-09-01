@@ -90,9 +90,12 @@ export const uploadAvatar = async (req, res) => {
     });
   }
 
-  const previousPublicId = req.user.avatarPublicId;
-
   const user = await User.findById(req.user._id);
+  // Read the previous id from the freshly loaded document, not from the
+  // req.user snapshot taken when the request was authenticated: two
+  // avatar uploads in flight at once would otherwise both see the
+  // original id and leave the loser's Cloudinary asset orphaned.
+  const previousPublicId = user.avatarPublicId;
   user.avatarUrl = uploadResult.secure_url;
   user.avatarPublicId = uploadResult.public_id;
   await user.save();

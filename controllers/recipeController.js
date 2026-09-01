@@ -60,10 +60,14 @@ const sanitizeCategory = (rawCategory) => {
   if (typeof rawCategory !== "string") {
     return { error: "Category must be text" };
   }
-  const trimmed = rawCategory.trim().slice(0, MAX_CATEGORY_LENGTH);
+  const trimmed = rawCategory.trim();
   if (!trimmed) {
     return { value: "" };
   }
+  // Moderate the text as submitted. Truncating to MAX_CATEGORY_LENGTH
+  // first made the length rule unreachable, so an over-long category was
+  // silently cut mid-word instead of returning the 400 the client shows
+  // as a field error.
   const moderationError = moderateShortText(trimmed);
   if (moderationError) {
     return { error: moderationError };
