@@ -68,13 +68,30 @@ const upload = multer({
   },
 }).single("file");
 
+// Images only, for routes where a video is never valid (avatars). Sharing
+// the media filter there meant a 50MB mp4 was accepted by multer and fully
+// buffered into memory before the handler rejected it for being the wrong
+// type; here it is refused on the first chunk at the 8MB image ceiling.
+const uploadImage = multer({
+  storage: new LimitedMemoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME_TYPES[file.mimetype] !== "image") {
+      return cb(new Error("Only JPEG, PNG or WebP images are allowed"));
+    }
+    cb(null, true);
+  },
+}).single("file");
+
 // Wraps multer so its errors (file too large, wrong type) become a 400
 // instead of falling through to the generic 500 error handler.
-export const uploadSingleMedia = (req, res, next) => {
-  upload(req, res, (err) => {
+const handleUploadErrors = (runUpload) => (req, res, next) => {
+  runUpload(req, res, (err) => {
     if (err) {
       return res.status(400).json({ message: err.message });
     }
     next();
   });
 };
+
+export const uploadSingleMedia = handleUploadErrors(upload);
+export const uploadSingleImage = handleUploadErrors(uploadImage);

@@ -1,5 +1,6 @@
 // controllers/categoryController.js
 import Recipe from "../models/Recipe.js";
+import { containsBlockedLanguage } from "../utils/moderateText.js";
 
 export const CATEGORIES = [
   "Beef",
@@ -17,7 +18,7 @@ export const CATEGORIES = [
   "Goat",
 ];
 
-const CATEGORIES_LOWER = new Set(CATEGORIES.map((c) => c.toLowerCase()));
+const CATEGORIES_LOWER = CATEGORIES.map((c) => c.toLowerCase());
 
 // Escape regex special characters so user input can't be used to build an
 // unintended pattern (regex injection) or a catastrophically slow one (ReDoS).
@@ -36,15 +37,29 @@ const communityMatches = async (matchStage) => {
     {
       $group: {
         _id: { $toLower: "$category" },
-        name: { $first: "$category" },
+        // $min rather than $first: without a preceding $sort, $first picks
+        // whichever document the group happened to see first, so the
+        // displayed casing of the same category would drift between
+        // requests. $min is stable for a given set of documents.
+        name: { $min: "$category" },
         count: { $sum: 1 },
       },
     },
-    { $sort: { count: -1 } },
+    // Curated names are dropped here, before the limit, so they can't eat
+    // the slots the community list is supposed to fill. Filtering these
+    // out afterwards in JS meant a common query ("s") could return eight
+    // curated groups and therefore an empty community list.
+    { $match: { _id: { $nin: [null, "", ...CATEGORIES_LOWER] } } },
+    // _id breaks ties so equally-used categories keep a stable order
+    // rather than swapping places between requests.
+    { $sort: { count: -1, _id: 1 } },
     { $limit: SUGGEST_LIMIT },
   ]);
+  // These strings were stored by other users. Anything written before the
+  // field was moderated - or that slipped through - would otherwise be
+  // autocompleted to everyone, so they are re-checked on the way out.
   return rows
-    .filter((c) => c._id && !CATEGORIES_LOWER.has(c._id))
+    .filter((c) => !containsBlockedLanguage(c.name))
     .map((c) => ({ name: c.name, count: c.count }));
 };
 

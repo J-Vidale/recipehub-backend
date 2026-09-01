@@ -10,3 +10,15 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many attempts, please try again later." },
 });
+
+// Applied to /api/categories. The suggest endpoint is public and fires on
+// every keystroke of the category field, and each call runs a grouping
+// aggregation - generous enough for real typing, low enough that it can't
+// be used to hammer the database.
+export const suggestLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please slow down." },
+});
