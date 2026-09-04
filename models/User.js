@@ -21,6 +21,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
       minlength: 6,
+      // Never returned unless a query opts in with .select('+password').
+      // Login is the only caller that needs it; this way no future
+      // res.json(user) can ship the bcrypt hash by omission.
+      select: false,
     },
     savedRecipes: [
       {
