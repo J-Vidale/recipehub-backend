@@ -8,8 +8,14 @@ import { ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../middleware/uploadMiddlew
 
 // Get logged-in user info
 export const getMe = async (req, res) => {
-  const user = await User.findById(req.user.id).select('-password').lean();
-  res.json(user);
+  // `protect` has already loaded this exact document (the caller's, minus
+  // the password) for this request, so re-querying here bought nothing and
+  // cost correctness: it looked up `req.user.id`, which is undefined on a
+  // lean document - only `_id` survives lean(). Mongoose 8 turns
+  // findById(undefined) into an empty filter, so the query became
+  // findOne({}) and returned whichever user happened to be first in the
+  // collection, to every caller.
+  res.json(req.user);
 };
 
 // GET /api/users/:id — public profile

@@ -73,7 +73,7 @@ export const loginUser = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username }).select('+password');
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
