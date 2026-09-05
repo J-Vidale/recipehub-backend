@@ -12,4 +12,10 @@ const commentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Every comment read on a recipe page filters by recipe and orders by
+// creation time; without this it is a collection scan that gets slower as
+// the site fills up. The reply lookup on delete filters by parentComment.
+commentSchema.index({ recipe: 1, createdAt: 1 });
+commentSchema.index({ parentComment: 1 });
+
 export default mongoose.model("Comment", commentSchema);
