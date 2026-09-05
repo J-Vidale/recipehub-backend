@@ -1,6 +1,10 @@
+// Must stay the first import: it loads the environment and starts error
+// monitoring before any other module is evaluated. See config/instrument.js.
+import "./config/instrument.js";
+
 import express from "express";
 import http from "http";
-import dotenv from "dotenv";
+import { Sentry, isMonitoringEnabled } from "./config/monitoring.js";
 import cors from "cors";
 import compression from "compression";
 import helmet from "helmet";
@@ -22,7 +26,6 @@ import authRoutes from "./routes/authRoutes.js";
 import { authLimiter } from "./middleware/rateLimiters.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 
-dotenv.config();
 connectDB();
 
 const app = express();
@@ -50,6 +53,20 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// These four are public, read-only, and change rarely: the curated
+// category list is a constant, popular tags and the meal proxy move
+// slowly. Letting a browser and any CDN in front of it reuse a response
+// for a few minutes removes most of their traffic. stale-while-revalidate
+// means the next visitor gets the cached copy immediately while a fresh
+// one is fetched behind them. Everything else stays uncached, because it
+// is either per-user or written to.
+const publicReadCache = (seconds) => (req, res, next) => {
+  if (req.method === "GET") {
+    res.set("Cache-Control", `public, max-age=${seconds}, stale-while-revalidate=${seconds * 2}`);
+  }
+  next();
+};
+
 // Routes
 app.use("/api/users", userRoutes);
 app.use("/api/users", followRoutes);
@@ -59,10 +76,10 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/search", searchRoutes);
 app.use("/api/users", blockRoutes);
 app.use("/api/reports", reportRoutes);
-app.use("/api/tags", tagRoutes);
+app.use("/api/tags", publicReadCache(300), tagRoutes);
 app.use("/api/conversations", conversationRoutes);
-app.use("/api/categories", categoryRoutes);
-app.use("/api/meals", mealRoutes);
+app.use("/api/categories", publicReadCache(600), categoryRoutes);
+app.use("/api/meals", publicReadCache(600), mealRoutes);
 app.use("/api/auth", authLimiter, authRoutes);
 
 // This service is API-only: the frontend is deployed separately as its own
@@ -75,8 +92,13 @@ app.get("/", (req, res) => {
   res.json({ status: "ok", service: "recipehub-api" });
 });
 
-// Error handling
+// Error handling. Sentry's handler observes the error first, then ours
+// shapes the response - the client still gets the generic 500 message
+// while the detail reaches the dashboard.
 app.use(notFound);
+if (isMonitoringEnabled()) {
+  Sentry.setupExpressErrorHandler(app);
+}
 app.use(errorHandler);
 
 // Server

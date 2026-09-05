@@ -12,19 +12,14 @@ import cloudinary from "../config/cloudinary.js";
 import { parseHashtags } from "../utils/parseHashtags.js";
 import { getCached, setCached } from "../utils/cache.js";
 import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
+import { parseListQuery, withCursor, buildPage } from "../utils/pagination.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
 
-const parsePagination = (query, defaultLimit = 20, maxLimit = 50) => {
-  let page = parseInt(query.page, 10);
-  if (!Number.isInteger(page) || page < 1) page = 1;
-
-  let limit = parseInt(query.limit, 10);
-  if (!Number.isInteger(limit) || limit < 1) limit = defaultLimit;
-  limit = Math.min(limit, maxLimit);
-
-  return { page, limit, skip: (page - 1) * limit };
-};
+// Kept as a thin alias so existing call sites read unchanged; the cursor
+// handling lives in utils/pagination.js.
+const parsePagination = (query, defaultLimit = 20, maxLimit = 50) =>
+  parseListQuery(query, defaultLimit, maxLimit);
 
 const validateIngredients = (ingredients) => {
   if (!Array.isArray(ingredients)) {
@@ -124,23 +119,19 @@ export const getAllRecipes = async (req, res) => {
   }
   parsedLimit = Math.min(parsedLimit, 50);
 
-  const skip = (parsedPage - 1) * parsedLimit;
+  const { skip, cursor } = parseListQuery(req.query, parsedLimit, 50);
 
   try {
     if (sort === "newest") {
-      const recipes = await Recipe.find()
+      const recipes = await Recipe.find(withCursor({}, cursor))
         .sort({ _id: -1 })
         .skip(skip)
         .limit(parsedLimit + 1)
         .populate("user", "username avatarUrl")
         .lean();
 
-      const hasMore = recipes.length > parsedLimit;
-      return res.json({
-        recipes: hasMore ? recipes.slice(0, parsedLimit) : recipes,
-        page: parsedPage,
-        hasMore,
-      });
+      const { items, hasMore, nextCursor } = buildPage(recipes, parsedLimit);
+      return res.json({ recipes: items, page: parsedPage, hasMore, nextCursor });
     }
 
     const cacheKey = `discover:page=${parsedPage}:limit=${parsedLimit}`;
@@ -235,15 +226,15 @@ export const getFollowingFeed = async (req, res) => {
 
 // GET /api/recipes/mine
 export const getMyRecipes = async (req, res) => {
-  const { page, limit, skip } = parsePagination(req.query);
-  const recipes = await Recipe.find({ user: req.user._id })
+  const { page, limit, skip, cursor } = parsePagination(req.query);
+  const recipes = await Recipe.find(withCursor({ user: req.user._id }, cursor))
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit + 1)
     .lean();
 
-  const hasMore = recipes.length > limit;
-  res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
+  const { items, hasMore, nextCursor } = buildPage(recipes, limit);
+  res.json({ recipes: items, page, hasMore, nextCursor });
 };
 
 // GET /api/recipes/:id
@@ -349,30 +340,30 @@ export const getRecipesByUser = async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     return res.status(400).json({ message: "Invalid user ID" });
   }
-  const { page, limit, skip } = parsePagination(req.query);
-  const recipes = await Recipe.find({ user: userId })
+  const { page, limit, skip, cursor } = parsePagination(req.query);
+  const recipes = await Recipe.find(withCursor({ user: userId }, cursor))
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit + 1)
     .lean();
 
-  const hasMore = recipes.length > limit;
-  res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore });
+  const { items, hasMore, nextCursor } = buildPage(recipes, limit);
+  res.json({ recipes: items, page, hasMore, nextCursor });
 };
 
 // GET /api/recipes/tag/:tag
 export const getRecipesByTag = async (req, res) => {
   const tag = req.params.tag.toLowerCase();
-  const { page, limit, skip } = parsePagination(req.query);
-  const recipes = await Recipe.find({ tags: tag })
+  const { page, limit, skip, cursor } = parsePagination(req.query);
+  const recipes = await Recipe.find(withCursor({ tags: tag }, cursor))
     .sort({ _id: -1 })
     .skip(skip)
     .limit(limit + 1)
     .populate("user", "username avatarUrl")
     .lean();
 
-  const hasMore = recipes.length > limit;
-  res.json({ recipes: hasMore ? recipes.slice(0, limit) : recipes, page, hasMore, tag });
+  const { items, hasMore, nextCursor } = buildPage(recipes, limit);
+  res.json({ recipes: items, page, hasMore, nextCursor, tag });
 };
 
 // GET /api/tags/popular

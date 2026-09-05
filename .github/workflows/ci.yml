@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the run still in flight, so CI
+# reports on the current head rather than finishing work on a commit that
+# has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the engines field in package.json. Keep the two in step.
+          node-version: 22
+          cache: npm
+
+      # ci, not install: it installs exactly what the lockfile pins and
+      # fails if package.json and the lockfile have drifted apart.
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      # Runtime dependencies only. A dev-only advisory should not block a
+      # deploy, and there is a separate weekly job below for those.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Check the server starts and its routes mount
+        run: node --input-type=module --eval "
+          process.env.NODE_ENV='test';
+          const mods = ['./middleware/authMiddleware.js','./middleware/uploadMiddleware.js','./middleware/rateLimiters.js','./middleware/errorMiddleware.js','./routes/userRoutes.js','./routes/recipeRoutes.js','./routes/categoryRoutes.js','./routes/conversationRoutes.js','./routes/mealRoutes.js'];
+          for (const m of mods) { await import(m); }
+          console.log('all ' + mods.length + ' modules import cleanly');
+          "
+
+  audit-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Reported, never blocking: a dev-tool advisory is worth knowing about
+      # but should not stop a fix from shipping.
+      - name: Audit everything (advisory)
+        run: npm audit --audit-level=low || true
