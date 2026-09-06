@@ -25,16 +25,14 @@ import mealRoutes from "./routes/mealRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import { authLimiter } from "./middleware/rateLimiters.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
+import { allowedOrigins, corsOriginCheck } from "./config/origins.js";
 
 connectDB();
 
 const app = express();
 
 // Middleware
-const allowedOrigins = [
-  "http://localhost:5173",
-  "https://recipehub-frontend-cgip.onrender.com"
-];
+
 
 // Render terminates TLS at its own proxy and forwards to this process, so
 // without this every request carries the proxy's address and req.ip is
@@ -46,7 +44,7 @@ app.set("trust proxy", 1);
 
 app.use(helmet());
 app.use(cors({
-  origin: allowedOrigins,
+  origin: corsOriginCheck,
   credentials: true,
 }));
 app.use(compression());
