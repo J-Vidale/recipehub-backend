@@ -32,10 +32,12 @@ jobs:
       - name: Test
         run: npm test
 
-      # Runtime dependencies only. A dev-only advisory should not block a
-      # deploy, and there is a separate weekly job below for those.
+      # Runtime dependencies only, and only high and critical block. A
+      # moderate advisory can land against a transitive dependency at any
+      # time, often before a fix exists, and should not stop an unrelated
+      # change from shipping - the advisory job below still reports it.
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=moderate
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Check the server starts and its routes mount
         run: node --input-type=module --eval "
