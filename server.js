@@ -59,9 +59,24 @@ app.use(express.urlencoded({ extended: true }));
 // one is fetched behind them. Everything else stays uncached, because it
 // is either per-user or written to.
 const publicReadCache = (seconds) => (req, res, next) => {
-  if (req.method === "GET") {
-    res.set("Cache-Control", `public, max-age=${seconds}, stale-while-revalidate=${seconds * 2}`);
-  }
+  if (req.method !== "GET") return next();
+
+  // The header has to be decided once the status is known. Setting it up
+  // front cached failures too: a 429 from the rate limiter, or a 502 while
+  // TheMealDB was down, would have been held by browsers and any shared
+  // CDN for ten minutes - turning a blip into an outage. writeHead is the
+  // last point before the response is committed.
+  const originalWriteHead = res.writeHead;
+  res.writeHead = function patchedWriteHead(...args) {
+    if (res.statusCode >= 200 && res.statusCode < 400) {
+      res.setHeader(
+        "Cache-Control",
+        `public, max-age=${seconds}, stale-while-revalidate=${seconds * 2}`
+      );
+    }
+    return originalWriteHead.apply(this, args);
+  };
+
   next();
 };
 
