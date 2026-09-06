@@ -22,3 +22,13 @@ export const suggestLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: "Too many requests, please slow down." },
 });
+
+// Applied to /api/recipes/:id/media - upload/delete of media involves file
+// I/O and storage costs, so per-user abuse needs to be capped.
+export const mediaLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many media requests, please try again later." },
+});
