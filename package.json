@@ -8,8 +8,8 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node --import ./config/instrument.js server.js",
+    "dev": "nodemon --import ./config/instrument.js server.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

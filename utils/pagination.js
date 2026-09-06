@@ -43,6 +43,16 @@ export const parseListQuery = (query, defaultLimit = DEFAULT_LIMIT, maxLimit = M
   };
 };
 
+// For list endpoints that cannot use a cursor - anything not ordered by
+// _id, such as the discover ranking or conversations ordered by last
+// message. Accepting a cursor there and ignoring it would zero the skip
+// and quietly serve page 1 while reporting page 4, so the cursor is not
+// parsed at all and page is always honoured.
+export const parsePageQuery = (query, defaultLimit = DEFAULT_LIMIT, maxLimit = MAX_LIMIT) => {
+  const { limit, page } = parseListQuery(query, defaultLimit, maxLimit);
+  return { limit, page, skip: (page - 1) * limit };
+};
+
 // Adds the cursor clause to a filter without mutating the caller's object.
 export const withCursor = (filter, cursor) =>
   cursor ? { ...filter, _id: { $lt: cursor } } : filter;

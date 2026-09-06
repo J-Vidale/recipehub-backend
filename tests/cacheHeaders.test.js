@@ -4,11 +4,20 @@ import request from "supertest";
 
 // server.js connects to MongoDB on import, so the middleware is rebuilt
 // here from the same definition rather than booting the whole app. The
-// shape is asserted against server.js separately, below.
+// last test in this file asserts this copy has not drifted from the real
+// one, and reviewFixes.test.js covers the status-aware behaviour.
 const publicReadCache = (seconds) => (req, res, next) => {
-  if (req.method === "GET") {
-    res.set("Cache-Control", `public, max-age=${seconds}, stale-while-revalidate=${seconds * 2}`);
-  }
+  if (req.method !== "GET") return next();
+  const originalWriteHead = res.writeHead;
+  res.writeHead = function patchedWriteHead(...args) {
+    if (res.statusCode >= 200 && res.statusCode < 400) {
+      res.setHeader(
+        "Cache-Control",
+        `public, max-age=${seconds}, stale-while-revalidate=${seconds * 2}`
+      );
+    }
+    return originalWriteHead.apply(this, args);
+  };
   next();
 };
 
@@ -63,5 +72,17 @@ describe("which routes carry it in server.js", () => {
         expect(match).not.toMatch(/publicReadCache/);
       }
     }
+  });
+});
+
+describe("this file's copy has not drifted from server.js", () => {
+  it("matches the real middleware", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(new URL("../server.js", import.meta.url), "utf8");
+    // The behaviour that matters: the header is decided at writeHead, once
+    // the status is known, and only for a non-error response.
+    expect(source).toMatch(/res\.writeHead = function patchedWriteHead/);
+    expect(source).toMatch(/res\.statusCode >= 200 && res\.statusCode < 400/);
+    expect(source).not.toMatch(/if \(req\.method === "GET"\) \{\s*res\.set\("Cache-Control"/);
   });
 });

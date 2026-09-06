@@ -1,6 +1,12 @@
 // middleware/errorMiddleware.js
 export const notFound = (req, res, next) => {
   const error = new Error(`Not Found - ${req.originalUrl}`);
+  // Sentry's default filter reads error.status and treats a status-less
+  // error as a 500, so without this every mistyped path and every bot
+  // scanning for /wp-login.php would be reported as an application
+  // exception. Our own handler reads res.statusCode, so this changes
+  // nothing about the response.
+  error.status = 404;
   res.status(404);
   next(error);
 };

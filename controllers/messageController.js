@@ -4,7 +4,7 @@ import Conversation, { buildPairKey } from "../models/Conversation.js";
 import Message from "../models/Message.js";
 import { isBlockedEitherWay } from "../utils/isBlocked.js";
 import { emitToUser } from "../config/socket.js";
-import { parseListQuery, withCursor, buildPage } from "../utils/pagination.js";
+import { parsePageQuery } from "../utils/pagination.js";
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
@@ -51,7 +51,7 @@ export const getConversations = async (req, res) => {
   // rows as the list reorders underneath the reader. This one keeps skip
   // deliberately; the page count here is bounded by how many people you
   // have talked to, so the cost stays small.
-  const { page, limit, skip } = parseListQuery(req.query, DEFAULT_LIMIT, MAX_LIMIT);
+  const { page, limit, skip } = parsePageQuery(req.query, DEFAULT_LIMIT, MAX_LIMIT);
 
   const conversations = await Conversation.find({ participants: req.user._id })
     .sort({ lastMessageAt: -1 })

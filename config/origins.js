@@ -48,8 +48,10 @@ export const allowedOrigins = parseOrigins(process.env.CORS_ORIGINS);
 // are allowed; the browser is the only thing CORS protects, and it always
 // sends one.
 export const corsOriginCheck = (origin, callback) => {
-  if (!origin || allowedOrigins.includes(normalise(origin))) {
-    return callback(null, true);
-  }
-  callback(new Error(`Origin ${origin} is not allowed`));
+  // false, not an Error. Passing an Error makes cors() call next(err),
+  // which reaches the error handler and returns a 500 "Server error" - and
+  // with monitoring on, reports every bot probing with a foreign Origin as
+  // an exception. Returning false simply omits the CORS headers, which is
+  // what makes the browser block the response, which is the actual intent.
+  callback(null, !origin || allowedOrigins.includes(normalise(origin)));
 };

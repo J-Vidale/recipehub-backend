@@ -12,7 +12,7 @@ import cloudinary from "../config/cloudinary.js";
 import { parseHashtags } from "../utils/parseHashtags.js";
 import { getCached, setCached } from "../utils/cache.js";
 import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
-import { parseListQuery, withCursor, buildPage } from "../utils/pagination.js";
+import { parseListQuery, parsePageQuery, withCursor, buildPage } from "../utils/pagination.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
 
@@ -119,13 +119,23 @@ export const getAllRecipes = async (req, res) => {
   }
   parsedLimit = Math.min(parsedLimit, 50);
 
-  const { skip, cursor } = parseListQuery(req.query, parsedLimit, 50);
+  // The "newest" branch is ordered by _id and can use a cursor; the
+  // discover branch below is a ranked, cached feed that cannot, so it
+  // takes its skip from the page number only.
+  // The "newest" branch is ordered by _id and pages by cursor. The
+  // discover branch below is a ranked, cached feed whose order is not _id,
+  // so it always pages by number: reusing one skip for both meant that
+  // ?page=3&cursor=... returned page 1 and then cached it under page 3,
+  // serving the wrong content to everyone for the cache's lifetime.
+  const { cursor } = parseListQuery(req.query, parsedLimit, 50);
+  const { skip: discoverSkip } = parsePageQuery(req.query, parsedLimit, 50);
+  const newestSkip = cursor ? 0 : discoverSkip;
 
   try {
     if (sort === "newest") {
       const recipes = await Recipe.find(withCursor({}, cursor))
         .sort({ _id: -1 })
-        .skip(skip)
+        .skip(newestSkip)
         .limit(parsedLimit + 1)
         .populate("user", "username avatarUrl")
         .lean();
@@ -166,7 +176,7 @@ export const getAllRecipes = async (req, res) => {
         },
       },
       { $sort: { trendingScore: -1, _id: -1 } },
-      { $skip: skip },
+      { $skip: discoverSkip },
       { $limit: parsedLimit + 1 },
     ]);
 
