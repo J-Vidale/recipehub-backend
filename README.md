@@ -36,19 +36,33 @@ npm install
 
 ### Environment Variables
 
-Create a `.env` file in the root with the following:
-
-```
-MONGO_URI=your_mongodb_connection_string
-JWT_SECRET=your_jwt_secret
-PORT=5000
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-REDIS_URL=your_redis_connection_string
+```sh
+cp .env.example .env
 ```
 
-`REDIS_URL` is optional. If it's unset, or Redis is unreachable, the app runs exactly as it would with it — caching is a pure performance layer, never a hard dependency. See "Caching" below.
+`.env.example` is the full list, with a note on each variable saying what
+it is for and where to get it. It is kept in step with the code, so it is
+the reference rather than a copy in this file that can drift.
+
+The required ones are `MONGO_URI`, `JWT_SECRET` and the three Cloudinary
+keys. Two are worth knowing about beyond that:
+
+- `CORS_ORIGINS` — required once the frontend is served from anything but
+  its default Render URL. It is both the CORS allowlist and the Socket.IO
+  handshake allowlist, so a missing entry makes the frontend look like it
+  has no backend.
+- `REDIS_URL` — optional. Unset, or unreachable, the app runs exactly as
+  it would with it: caching is a performance layer, never a hard
+  dependency. See "Caching" below.
+
+### Tests
+
+```sh
+npm test
+```
+
+No database or network needed. CI runs the same command, plus a
+production-dependency audit, on every push and pull request.
 
 ### Running the Server
 
@@ -198,10 +212,19 @@ You can deploy this backend to [Render](https://render.com/) or any Node.js host
 **Render Deployment Steps:**
 1. Push your code to GitHub.
 2. Create a new Web Service on Render, connect your repo.
-3. Set build command: `npm install`
+3. Set build command: `npm ci` (not `npm install` — `ci` installs exactly what the lockfile pins and fails if it has drifted from package.json)
 4. Set start command: `npm start` (do **not** use `npm run dev` in production — that runs `nodemon`, a dev-only file watcher)
-5. Add environment variables (`MONGO_URI`, `JWT_SECRET`, `PORT`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)
-6. Deploy!
+5. Set health check path: `/`
+6. Add the environment variables listed in `.env.example`
+7. Deploy
+
+`npm start` runs Node with `--import ./config/instrument.js`. That flag is
+what lets error monitoring wrap Express and Mongoose; in ESM an import
+inside `server.js` runs too late to do it. Keep it if you change the
+command.
+
+The full walkthrough, covering both services and the accounts they need,
+is in `DEPLOYMENT.md` in the frontend repository.
 
 ---
 
