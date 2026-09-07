@@ -47,10 +47,12 @@ the reference rather than a copy in this file that can drift.
 The required ones are `MONGO_URI`, `JWT_SECRET` and the three Cloudinary
 keys. Two are worth knowing about beyond that:
 
-- `CORS_ORIGINS` — required once the frontend is served from anything but
-  its default Render URL. It is both the CORS allowlist and the Socket.IO
-  handshake allowlist, so a missing entry makes the frontend look like it
-  has no backend.
+- `CORS_ORIGINS` — required in production. It is both the CORS allowlist
+  and the Socket.IO handshake allowlist, so a wrong entry makes the
+  frontend look like it has no backend, with the only clue in the browser
+  console. Unset, the API allows the local dev and preview servers and one
+  Render URL from an earlier deployment, which a newly created service will
+  not match.
 - `REDIS_URL` — optional. Unset, or unreachable, the app runs exactly as
   it would with it: caching is a performance layer, never a hard
   dependency. See "Caching" below.
@@ -209,6 +211,12 @@ or any Redis-compatible host) and set `REDIS_URL` to its connection string.
 
 You can deploy this backend to [Render](https://render.com/) or any Node.js hosting provider.
 
+`render.yaml` in this repository is a Render blueprint: **New → Blueprint**,
+point it at this repo, and the runtime, build and start commands and health
+check path come from the file. It generates `JWT_SECRET` and prompts for
+the rest. The steps below are the same thing done by hand, for any other
+host or if you would rather see each field.
+
 **Render Deployment Steps:**
 1. Push your code to GitHub.
 2. Create a new Web Service on Render, connect your repo.
@@ -222,6 +230,13 @@ You can deploy this backend to [Render](https://render.com/) or any Node.js host
 what lets error monitoring wrap Express and Mongoose; in ESM an import
 inside `server.js` runs too late to do it. Keep it if you change the
 command.
+
+Whatever route you take, read the first lines of the service's log once it
+starts. It prints the environment, the browser origins it will accept and
+whether monitoring and caching are on, then names any variable that is
+missing or obviously wrong - including an Atlas connection string still
+carrying its password placeholder, which is the usual reason a first deploy
+answers `bad auth`.
 
 The full walkthrough, covering both services and the accounts they need,
 is in `DEPLOYMENT.md` in the frontend repository.
