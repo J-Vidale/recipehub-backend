@@ -28,6 +28,7 @@ import { authLimiter } from "./middleware/rateLimiters.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 import { allowedOrigins, corsOriginCheck } from "./config/origins.js";
 import { buildHealthReport } from "./utils/health.js";
+import { reportStartup } from "./utils/startupChecks.js";
 
 connectDB();
 
@@ -139,4 +140,7 @@ initSocket(httpServer, allowedOrigins);
 
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  // Names any misconfigured variable while someone is still looking at
+  // the deploy log, rather than leaving it to be found from the outside.
+  reportStartup(process.env, allowedOrigins);
 });

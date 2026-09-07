@@ -26,8 +26,9 @@ if (process.env.REDIS_URL) {
   redisClient.on("connect", () => {
     console.log("Redis connected - caching enabled");
   });
-} else {
-  console.log("REDIS_URL not set - caching disabled, running without a cache layer");
 }
+// Nothing is logged when REDIS_URL is unset: the startup summary in
+// utils/startupChecks.js already reports the cache as off, and saying it
+// twice makes a deploy log harder to read, not easier.
 
 export default redisClient;
