@@ -25,6 +25,7 @@ import {
   unpinComment,
 } from "../controllers/commentController.js";
 import { protect } from "../middleware/authMiddleware.js";
+import { mediaLimiter } from "../middleware/rateLimiters.js";
 
 const router = express.Router();
 
@@ -46,8 +47,8 @@ router
   .put(protect, updateRecipe)
   .delete(protect, deleteRecipe);
 
-router.post("/:id/media", protect, loadOwnedRecipe, uploadSingleMedia, addRecipeMedia);
-router.delete("/:id/media/:mediaId", protect, loadOwnedRecipe, deleteRecipeMedia);
+router.post("/:id/media", protect, mediaLimiter, loadOwnedRecipe, uploadSingleMedia, addRecipeMedia);
+router.delete("/:id/media/:mediaId", protect, mediaLimiter, loadOwnedRecipe, deleteRecipeMedia);
 
 router.post("/:id/like", protect, likeRecipe);
 router.delete("/:id/like", protect, unlikeRecipe);
