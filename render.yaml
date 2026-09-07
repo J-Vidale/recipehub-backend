@@ -1,0 +1,70 @@
+# Render Blueprint for the RecipeHub API.
+#
+# Render reads this when you create a service with New -> Blueprint and
+# point it at this repository. It fills in the runtime, the build and start
+# commands and the health check path, and then prompts once for the values
+# it cannot know. Configuring the same service by hand in the dashboard
+# works exactly as well; this only removes the chance of a typo in a field
+# nobody checks twice.
+#
+# The web client is a separate service in a separate repository, with its
+# own render.yaml. Deploy this one first: the client needs this service's
+# URL, and this service needs the client's origin.
+#
+# Full reference: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: recipehub-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+
+    # The root path answers without touching the database and always
+    # returns 200, so a health check on it restarts the process only when
+    # the process is genuinely gone. See the comment on it in server.js.
+    healthCheckPath: /
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Generated for you, and never shown to anyone. Changing it later
+      # invalidates every existing login.
+      - key: JWT_SECRET
+        generateValue: true
+
+      # Prompted for on the first deploy. All of these are secrets except
+      # CORS_ORIGINS; .env.example in this repo describes each one.
+      #
+      # The Atlas connection string arrives with its password written as a
+      # placeholder - replace it, or the service will start and log a
+      # warning saying exactly this.
+      - key: MONGO_URI
+        sync: false
+
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # The web client's origin, comma separated if there is more than one
+      # (add the www variant if you use one). Scheme and host only, no
+      # trailing path.
+      #
+      # You will not know this until the client's service exists, so set it
+      # to anything now and correct it afterwards - the deploy log warns
+      # while it is unset, and /status on the site names it too. Until it
+      # is right the browser refuses every response and the site looks like
+      # it has no API at all.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Optional, and off unless set. Add them in the dashboard later
+      # rather than here, so the blueprint does not prompt for values you
+      # may not want yet:
+      #   SENTRY_DSN  - error reporting, from a Node.js project at sentry.io
+      #   REDIS_URL   - response cache; without it the app runs uncached
