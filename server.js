@@ -8,6 +8,7 @@ import { Sentry, isMonitoringEnabled } from "./config/monitoring.js";
 import cors from "cors";
 import compression from "compression";
 import helmet from "helmet";
+import mongoose from "mongoose";
 import connectDB from "./config/db.js";
 import { initSocket } from "./config/socket.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -26,6 +27,7 @@ import authRoutes from "./routes/authRoutes.js";
 import { authLimiter } from "./middleware/rateLimiters.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 import { allowedOrigins, corsOriginCheck } from "./config/origins.js";
+import { buildHealthReport } from "./utils/health.js";
 
 connectDB();
 
@@ -102,7 +104,20 @@ app.use("/api/auth", authLimiter, authRoutes);
 // failed with ENOENT - returning a 500 and skipping the notFound handler
 // below, which already produces the correct 404.
 app.get("/", (req, res) => {
-  res.json({ status: "ok", service: "recipehub-api" });
+  // Deliberately always 200, and deliberately free of database work.
+  //
+  // This is the host's health check path and the target for any uptime
+  // pinger, so it has to be cheap and it has to answer "is the web process
+  // alive" rather than "is everything perfect". Returning 503 while the
+  // database is briefly unreachable would make the platform restart a
+  // process that is working fine, which cannot fix a database and turns a
+  // blip into a restart loop.
+  //
+  // The database state is reported in the body instead: readyState is a
+  // local integer the driver keeps up to date, so this costs no round
+  // trip, and it is what tells you apart an API that is down from one that
+  // is up but cannot reach Atlas.
+  res.json(buildHealthReport(mongoose.connection.readyState, process.uptime()));
 });
 
 // Error handling. Sentry's handler observes the error first, then ours
