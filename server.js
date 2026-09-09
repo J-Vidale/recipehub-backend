@@ -24,7 +24,7 @@ import conversationRoutes from "./routes/conversationRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import mealRoutes from "./routes/mealRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
-import { authLimiter } from "./middleware/rateLimiters.js";
+import { authLimiter, writeLimiter } from "./middleware/rateLimiters.js";
 import { notFound, errorHandler } from "./middleware/errorMiddleware.js";
 import { allowedOrigins, corsOriginCheck } from "./config/origins.js";
 import { buildHealthReport } from "./utils/health.js";
@@ -51,6 +51,13 @@ app.use(cors({
   credentials: true,
 }));
 app.use(compression());
+
+// Before the body parsers on purpose: a request that is over its budget is
+// refused without reading its body, so an abusive client cannot make the
+// process buffer megabytes it is about to throw away. Reads are skipped
+// inside the limiter, so ordinary browsing is untouched.
+app.use(writeLimiter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
