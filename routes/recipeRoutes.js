@@ -15,6 +15,7 @@ import {
 } from "../controllers/recipeController.js";
 import { addRecipeMedia, deleteRecipeMedia, loadOwnedRecipe } from "../controllers/mediaController.js";
 import { uploadSingleMedia } from "../middleware/uploadMiddleware.js";
+import { uploadLimiter } from "../middleware/rateLimiters.js";
 import { likeRecipe, unlikeRecipe } from "../controllers/likeController.js";
 import { shareRecipe, unshareRecipe } from "../controllers/shareController.js";
 import {
@@ -46,7 +47,7 @@ router
   .put(protect, updateRecipe)
   .delete(protect, deleteRecipe);
 
-router.post("/:id/media", protect, loadOwnedRecipe, uploadSingleMedia, addRecipeMedia);
+router.post("/:id/media", uploadLimiter, protect, loadOwnedRecipe, uploadSingleMedia, addRecipeMedia);
 router.delete("/:id/media/:mediaId", protect, loadOwnedRecipe, deleteRecipeMedia);
 
 router.post("/:id/like", protect, likeRecipe);
