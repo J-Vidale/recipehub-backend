@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import User, { CASE_INSENSITIVE } from "../models/User.js";
 
 // Generate JWT
 const generateToken = (userId) => {
@@ -30,19 +30,29 @@ export const registerUser = async (req, res) => {
         .json({ message: "Password must be at least 6 characters" });
     }
 
-    const existingEmail = await User.findOne({ email }).lean();
+    // Trimmed here as well as in the schema: the schema trims what gets
+    // stored, but these lookups compare what was typed, so " marta" would
+    // otherwise miss the existing "marta" and fail later on the index.
+    const cleanUsername = username.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    const existingEmail = await User.findOne({ email: cleanEmail }).lean();
     if (existingEmail) {
       return res.status(400).json({ message: "Email already in use" });
     }
 
-    const existingUsername = await User.findOne({ username }).lean();
+    // Case-insensitively: "Marta" and "marta" are the same name to
+    // everyone reading it, so they cannot be two accounts.
+    const existingUsername = await User.findOne({ username: cleanUsername })
+      .collation(CASE_INSENSITIVE)
+      .lean();
     if (existingUsername) {
       return res.status(400).json({ message: "Username already in use" });
     }
 
     const newUser = await User.create({
-      username,
-      email,
+      username: cleanUsername,
+      email: cleanEmail,
       password, // let the pre-save hook hash it
     });
 
@@ -73,7 +83,11 @@ export const loginUser = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ username }).select('+password');
+    // Same collation as registration, so the name that was accepted is the
+    // name that logs in, whatever case it is typed in.
+    const user = await User.findOne({ username: username.trim() })
+      .collation(CASE_INSENSITIVE)
+      .select("+password");
     if (!user || !(await user.matchPassword(password))) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
