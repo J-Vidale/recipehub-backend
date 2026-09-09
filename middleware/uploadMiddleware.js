@@ -58,8 +58,15 @@ class LimitedMemoryStorage {
   }
 }
 
+// Belt and braces alongside the streaming size check above: multer's own
+// ceilings on how many parts a single request may carry. Without them a
+// request can hold thousands of tiny fields, which costs parsing time
+// before any handler sees it.
+const PART_LIMITS = { files: 1, fields: 10, parts: 15, fieldSize: 100 * 1024 };
+
 const upload = multer({
   storage: new LimitedMemoryStorage(),
+  limits: PART_LIMITS,
   fileFilter: (req, file, cb) => {
     if (!ALLOWED_MIME_TYPES[file.mimetype]) {
       return cb(new Error("Unsupported file type"));
@@ -74,6 +81,7 @@ const upload = multer({
 // type; here it is refused on the first chunk at the 8MB image ceiling.
 const uploadImage = multer({
   storage: new LimitedMemoryStorage(),
+  limits: PART_LIMITS,
   fileFilter: (req, file, cb) => {
     if (ALLOWED_MIME_TYPES[file.mimetype] !== "image") {
       return cb(new Error("Only JPEG, PNG or WebP images are allowed"));

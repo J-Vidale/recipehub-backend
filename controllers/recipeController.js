@@ -21,6 +21,34 @@ const DISCOVER_CACHE_TTL_SECONDS = 60;
 const parsePagination = (query, defaultLimit = 20, maxLimit = 50) =>
   parseListQuery(query, defaultLimit, maxLimit);
 
+// Recipes were the only free text with no ceiling on it. A title could be
+// a hundred kilobytes, and a non-string one reached mongoose's cast and
+// came back as a 500 rather than the field error it is. Comments and
+// messages already have limits; these bring recipes in line.
+export const MAX_TITLE_LENGTH = 140;
+export const MAX_INSTRUCTIONS_LENGTH = 10000;
+
+const sanitizeTitle = (raw) => {
+  if (typeof raw !== "string") return { error: "Title is required" };
+  const title = raw.trim();
+  if (!title) return { error: "Title is required" };
+  if (title.length > MAX_TITLE_LENGTH) {
+    return { error: `Title cannot exceed ${MAX_TITLE_LENGTH} characters` };
+  }
+  return { value: title };
+};
+
+const sanitizeInstructions = (raw) => {
+  if (raw === undefined || raw === null) return { value: "" };
+  if (typeof raw !== "string") return { error: "Instructions must be text" };
+  if (raw.length > MAX_INSTRUCTIONS_LENGTH) {
+    return {
+      error: `Instructions cannot exceed ${MAX_INSTRUCTIONS_LENGTH} characters`,
+    };
+  }
+  return { value: raw };
+};
+
 const validateIngredients = (ingredients) => {
   if (!Array.isArray(ingredients)) {
     return { error: "Ingredients must be an array" };
@@ -74,8 +102,15 @@ const sanitizeCategory = (rawCategory) => {
 export const createRecipe = async (req, res) => {
   const { title, instructions, category, ingredients } = req.body;
 
-  if (typeof title !== "string" || !title.trim()) {
-    return res.status(400).json({ message: "Title is required" });
+  const { error: titleError, value: cleanTitle } = sanitizeTitle(title);
+  if (titleError) {
+    return res.status(400).json({ message: titleError });
+  }
+
+  const { error: instructionsError, value: cleanInstructions } =
+    sanitizeInstructions(instructions);
+  if (instructionsError) {
+    return res.status(400).json({ message: instructionsError });
   }
 
   let cleanIngredients = [];
@@ -93,11 +128,11 @@ export const createRecipe = async (req, res) => {
   }
 
   const recipe = await Recipe.create({
-    title: title.trim(),
-    instructions,
+    title: cleanTitle,
+    instructions: cleanInstructions,
     category: cleanCategory,
     ingredients: cleanIngredients,
-    tags: parseHashtags(instructions),
+    tags: parseHashtags(cleanInstructions),
     user: req.user._id,
   });
 
@@ -275,10 +310,21 @@ export const updateRecipe = async (req, res) => {
     return res.status(403).json({ message: "Not authorized" });
   }
 
-  if (req.body.title !== undefined) recipe.title = req.body.title;
+  if (req.body.title !== undefined) {
+    const { error, value } = sanitizeTitle(req.body.title);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    recipe.title = value;
+  }
+
   if (req.body.instructions !== undefined) {
-    recipe.instructions = req.body.instructions;
-    recipe.tags = parseHashtags(req.body.instructions);
+    const { error, value } = sanitizeInstructions(req.body.instructions);
+    if (error) {
+      return res.status(400).json({ message: error });
+    }
+    recipe.instructions = value;
+    recipe.tags = parseHashtags(value);
   }
   if (req.body.category !== undefined) {
     const { error: categoryError, value: cleanCategory } = sanitizeCategory(req.body.category);
