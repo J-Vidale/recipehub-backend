@@ -1,5 +1,21 @@
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import User, { CASE_INSENSITIVE } from "../models/User.js";
+import {
+  validateUsername,
+  validateEmail,
+  validatePassword,
+  MAX_PASSWORD_LENGTH,
+} from "../utils/credentials.js";
+
+// A hash of a value no submitted password will match, used to spend the
+// same time on a username that does not exist as on one that does.
+//
+// Without it, a login for an unknown username returned in a millisecond
+// while a wrong password for a real one took the ~80ms bcrypt costs, and
+// that difference is a reliable answer to "is this person registered
+// here" for anyone willing to time it. Computed once at startup.
+const ABSENT_USER_HASH = bcrypt.hashSync("password-for-no-one", 10);
 
 // Generate JWT
 const generateToken = (userId) => {
@@ -13,21 +29,12 @@ export const registerUser = async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    if (
-      typeof username !== "string" ||
-      typeof email !== "string" ||
-      typeof password !== "string" ||
-      !username ||
-      !email ||
-      !password
-    ) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
-
-    if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 6 characters" });
+    // One message at a time, in field order, so the form can show the
+    // error against the field it belongs to.
+    const invalid =
+      validateUsername(username) || validateEmail(email) || validatePassword(password);
+    if (invalid) {
+      return res.status(400).json({ message: invalid });
     }
 
     // Trimmed here as well as in the schema: the schema trims what gets
@@ -82,13 +89,26 @@ export const loginUser = async (req, res) => {
     return res.status(401).json({ message: "Invalid username or password" });
   }
 
+  // Refused before it reaches bcrypt: no real password is this long, and
+  // hashing a hundred kilobytes of it on every attempt would be a cheap
+  // way to keep the process busy.
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    return res.status(401).json({ message: "Invalid username or password" });
+  }
+
   try {
     // Same collation as registration, so the name that was accepted is the
     // name that logs in, whatever case it is typed in.
     const user = await User.findOne({ username: username.trim() })
       .collation(CASE_INSENSITIVE)
       .select("+password");
-    if (!user || !(await user.matchPassword(password))) {
+    // The comparison runs either way. Skipping it when there is no such
+    // user is what makes the response time say whether the name exists.
+    const matches = user
+      ? await user.matchPassword(password)
+      : await bcrypt.compare(password, ABSENT_USER_HASH);
+
+    if (!user || !matches) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
 
