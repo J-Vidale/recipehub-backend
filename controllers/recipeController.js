@@ -98,6 +98,15 @@ const sanitizeCategory = (rawCategory) => {
   return { value: trimmed };
 };
 
+// A recipe id that is not an id at all.
+//
+// Mongoose throws a CastError on it, which Express 5 forwards to the error
+// handler as a 500 - so a mistyped link, or a bot walking the URL space,
+// came back as "the server is broken" and, with monitoring on, as an
+// exception in the dashboard. It is a bad request, and it is worth saying
+// so in the same words everywhere.
+const invalidRecipeId = (id) => !mongoose.Types.ObjectId.isValid(id);
+
 // POST /api/recipes
 export const createRecipe = async (req, res) => {
   const { title, instructions, category, ingredients } = req.body;
@@ -300,6 +309,10 @@ export const getSingleRecipe = async (req, res) => {
 
 // PUT /api/recipes/:id
 export const updateRecipe = async (req, res) => {
+  if (invalidRecipeId(req.params.id)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
   const recipe = await Recipe.findById(req.params.id);
 
   if (!recipe) {
@@ -348,6 +361,10 @@ export const updateRecipe = async (req, res) => {
 
 // DELETE /api/recipes/:id
 export const deleteRecipe = async (req, res) => {
+  if (invalidRecipeId(req.params.id)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
   try {
     const recipe = await Recipe.findById(req.params.id).lean();
 
@@ -481,6 +498,10 @@ export const saveRecipe = async (req, res) => {
 
 // Unsave a recipe
 export const unsaveRecipe = async (req, res) => {
+  if (invalidRecipeId(req.params.recipeId)) {
+    return res.status(400).json({ message: "Invalid recipe ID" });
+  }
+
   try {
     const result = await User.updateOne(
       { _id: req.user._id },
