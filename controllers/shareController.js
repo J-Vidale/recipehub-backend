@@ -35,8 +35,12 @@ export const shareRecipe = async (req, res) => {
     });
   }
 
+  // Guarded the way unshareRecipe below already guards it: the recipe can
+  // be deleted between the lookup at the top of this handler and this read,
+  // and reading shareCount off nothing is a TypeError that Express 5
+  // forwards as a 500.
   const updated = await Recipe.findById(recipe._id).select("shareCount").lean();
-  res.json({ shareCount: updated.shareCount, sharedByMe: true });
+  res.json({ shareCount: updated ? updated.shareCount : 0, sharedByMe: true });
 };
 
 // DELETE /api/recipes/:id/share
