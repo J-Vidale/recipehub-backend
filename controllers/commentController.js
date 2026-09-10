@@ -205,19 +205,33 @@ export const deleteComment = async (req, res) => {
 
   const replies = await Comment.find({ parentComment: comment._id }).lean();
   const commentIds = [comment._id, ...replies.map((r) => r._id)];
-  const deletedCount = commentIds.length;
+
+  // The comment rows go first, same as deleting a recipe. Liking a comment
+  // looks it up and answers 404 when it is gone, so removing the rows
+  // before their likes closes the window where a like could arrive after
+  // its own cascade step had passed and outlive it as an orphan.
+  const removed = await Comment.deleteMany({ _id: { $in: commentIds } });
 
   await CommentLike.deleteMany({ comment: { $in: commentIds } });
   await Notification.deleteMany({ comment: { $in: commentIds } });
-  await Comment.deleteMany({ _id: { $in: commentIds } });
 
-  await Recipe.updateOne(
-    { _id: recipe._id },
-    { $inc: { commentCount: -deletedCount } }
-  );
-
+  // How many were actually removed, not how many were found a moment ago.
+  // Two deletes racing on the same comment both saw the same list and both
+  // subtracted its length, taking commentCount down twice for one deletion.
+  // The second delete now removes nothing and subtracts nothing. The guard
+  // is the same one the like counters use: a count that has already drifted
+  // should stay where it is rather than go negative.
+  const deletedCount = removed?.deletedCount ?? 0;
+  const update = { $inc: { commentCount: -deletedCount } };
   if (recipe.pinnedComment && recipe.pinnedComment.toString() === comment._id.toString()) {
-    await Recipe.updateOne({ _id: recipe._id }, { $set: { pinnedComment: null } });
+    // Folded into the same write rather than a second round trip.
+    update.$set = { pinnedComment: null };
+  }
+  if (deletedCount > 0 || update.$set) {
+    await Recipe.updateOne(
+      { _id: recipe._id, commentCount: { $gte: deletedCount } },
+      update
+    );
   }
 
   res.json({ message: "Comment deleted" });
