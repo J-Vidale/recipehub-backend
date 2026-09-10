@@ -39,13 +39,13 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
-      - name: Check the server starts and its routes mount
-        run: node --input-type=module --eval "
-          process.env.NODE_ENV='test';
-          const mods = ['./middleware/authMiddleware.js','./middleware/uploadMiddleware.js','./middleware/rateLimiters.js','./middleware/errorMiddleware.js','./routes/userRoutes.js','./routes/recipeRoutes.js','./routes/categoryRoutes.js','./routes/conversationRoutes.js','./routes/mealRoutes.js'];
-          for (const m of mods) { await import(m); }
-          console.log('all ' + mods.length + ' modules import cleanly');
-          "
+      # The hand-written module list this replaced named five of the
+      # thirteen routers, so a router added later - or a broken import
+      # inside one of the eight it did not name - went straight past it.
+      # The script reads the directories instead: 54 modules, and it
+      # cannot drift.
+      - name: Check every module imports
+        run: npm run smoke
 
   audit-all:
     runs-on: ubuntu-latest
