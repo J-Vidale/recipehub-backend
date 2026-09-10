@@ -9,6 +9,14 @@ import { parsePageQuery } from "../utils/pagination.js";
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
+// The conversation list shows one line per row, and a message can be 2000
+// characters. Storing the whole body as the preview put up to 50 of them in
+// a single list response - tens of kilobytes to render a few words each.
+export const MAX_PREVIEW_LENGTH = 140;
+
+export const previewOf = (text) =>
+  text.length > MAX_PREVIEW_LENGTH ? `${text.slice(0, MAX_PREVIEW_LENGTH - 1).trimEnd()}\u2026` : text;
+
 const otherParticipant = (conversation, selfId) =>
   conversation.participants.find((p) => p.toString() !== selfId.toString());
 
@@ -146,9 +154,26 @@ export const sendMessage = async (req, res) => {
     text: text.trim(),
   });
 
-  conversation.lastMessageText = message.text;
-  conversation.lastMessageAt = message.createdAt;
-  await conversation.save();
+  // Conditional, not a read-modify-write. Two messages arriving close
+  // together both loaded this conversation, both set the preview, and
+  // whichever saved last won - which could be the older of the two. The
+  // list is sorted by lastMessageAt and shows lastMessageText, so that put
+  // a stale preview at the wrong place in the list. This only ever moves
+  // the preview forward.
+  await Conversation.updateOne(
+    // $lte, not $lt: a new conversation's lastMessageAt defaults to its
+    // creation time, so a first message sent in the same millisecond would
+    // be turned away and the conversation would sit in the list with no
+    // preview at all. Between two messages an exact tie to the millisecond
+    // is a genuine tie, and either of them is fairly called the latest.
+    { _id: conversation._id, lastMessageAt: { $lte: message.createdAt } },
+    {
+      $set: {
+        lastMessageText: previewOf(message.text),
+        lastMessageAt: message.createdAt,
+      },
+    }
+  );
 
   emitToUser(recipientId.toString(), "message:new", {
     conversationId: conversation._id,
