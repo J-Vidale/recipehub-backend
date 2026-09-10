@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import Recipe from '../models/Recipe.js';
 import Follow from '../models/Follow.js';
 import cloudinary from '../config/cloudinary.js';
+import { destroyQuietly } from '../utils/media.js';
 import { ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../middleware/uploadMiddleware.js';
 
 // Get logged-in user info
@@ -106,9 +107,10 @@ export const uploadAvatar = async (req, res) => {
   user.avatarPublicId = uploadResult.public_id;
   await user.save();
 
-  if (previousPublicId) {
-    await cloudinary.uploader.destroy(previousPublicId, { resource_type: 'image' }).catch(() => {});
-  }
+  // The new avatar is already saved; losing the old file is not worth
+  // failing on. .catch() alone was not enough - destroy throws rather
+  // than rejecting when the credentials are missing.
+  await destroyQuietly(previousPublicId);
 
   res.json({ avatarUrl: user.avatarUrl });
 };
@@ -125,9 +127,7 @@ export const deleteAvatar = async (req, res) => {
   user.avatarPublicId = null;
   await user.save();
 
-  if (publicId) {
-    await cloudinary.uploader.destroy(publicId, { resource_type: 'image' }).catch(() => {});
-  }
+  await destroyQuietly(publicId);
 
   res.json({ avatarUrl: null });
 };

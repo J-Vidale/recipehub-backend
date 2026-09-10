@@ -18,8 +18,14 @@ export async function addLike({ LikeModel, likeQuery, CountModel, countId }) {
       throw err;
     }
     // Already liked - idempotent; re-read the current count.
+    //
+    // The row can be gone by now. deleteRecipe clears a recipe's likes
+    // before it deletes the recipe, so a like arriving between those two
+    // writes survives the cascade as an orphan - and the next like on that
+    // recipe is a duplicate, lands here, and finds nothing to read. Guarded
+    // the same way removeLike below already guards it.
     const current = await CountModel.findById(countId).select("likeCount");
-    return { likeCount: current.likeCount, likedByMe: true, created: false };
+    return { likeCount: current ? current.likeCount : 0, likedByMe: true, created: false };
   }
 }
 

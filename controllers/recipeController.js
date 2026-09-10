@@ -12,6 +12,7 @@ import cloudinary from "../config/cloudinary.js";
 import { parseHashtags } from "../utils/parseHashtags.js";
 import { getCached, setCached } from "../utils/cache.js";
 import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
+import { destroyQuietly } from "../utils/media.js";
 import { parseListQuery, parsePageQuery, withCursor, buildPage } from "../utils/pagination.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
@@ -394,17 +395,22 @@ export const deleteRecipe = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Best-effort: a Cloudinary hiccup on one asset shouldn't block the
-    // user from deleting their own recipe.
-    await Promise.allSettled(
-      recipe.media.map((item) =>
-        cloudinary.uploader.destroy(item.publicId, {
-          resource_type: item.type === "video" ? "video" : "image",
-        })
-      )
-    );
-
+    // The recipe row goes first, and everything that hung off it follows.
+    //
+    // The other order left a window: the recipe stayed visible - and so
+    // likeable, savable, commentable, shareable - through the Cloudinary
+    // round trips and every cascade delete. A like arriving after
+    // Like.deleteMany survived as an orphan; a save arriving after the
+    // $pull below left a phantom entry in someone's saved list, pointing
+    // at a recipe that no longer exists. Every one of those paths starts
+    // by looking the recipe up and answers 404 when it is gone, so
+    // removing it first closes the window for all of them at once.
+    //
+    // Comment ids are collected before the row goes, because nothing here
+    // depends on the recipe document itself once it has been read.
     const commentIds = await Comment.find({ recipe: recipe._id }).distinct("_id");
+    await Recipe.deleteOne({ _id: recipe._id });
+
     await CommentLike.deleteMany({ comment: { $in: commentIds } });
     await Like.deleteMany({ recipe: recipe._id });
     await Share.deleteMany({ recipe: recipe._id });
@@ -414,7 +420,14 @@ export const deleteRecipe = async (req, res) => {
       { savedRecipes: recipe._id },
       { $pull: { savedRecipes: recipe._id } }
     );
-    await Recipe.deleteOne({ _id: recipe._id });
+
+    // Last, and best-effort: a Cloudinary hiccup on one asset must not
+    // fail a delete that has already happened in the database.
+    await Promise.all(
+      recipe.media.map((item) =>
+        destroyQuietly(item.publicId, item.type === "video" ? "video" : "image")
+      )
+    );
 
     res.json({ message: "Recipe deleted" });
   } catch (err) {
