@@ -61,3 +61,27 @@ describe("best-effort media cleanup", () => {
     expect(source).toMatch(/from "\.\.\/config\/cloudinary\.js"/);
   });
 });
+
+describe("the upload rollback", () => {
+  it("goes through destroyQuietly, not a bare .catch", async () => {
+    // A throw from inside a catch block skips the response that follows
+    // it, so the caller gets the error handler's generic 500 instead of
+    // the one that says what actually went wrong.
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(new URL("../controllers/mediaController.js", import.meta.url), "utf8");
+    const rollback = source.slice(source.indexOf("Failed to save recipe after upload") - 700);
+    expect(rollback).toMatch(/destroyQuietly\(uploadResult\.public_id/);
+    expect(rollback).not.toMatch(/\.catch\(\(\) => \{\}\)/);
+  });
+
+  it("leaves the media controller's own delete to fail loudly", async () => {
+    // Deleting one image from a recipe genuinely needs to know the asset
+    // is gone; dropping the row while the file survives would be wrong.
+    // That one is not best-effort and must not be quieted.
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(new URL("../controllers/mediaController.js", import.meta.url), "utf8");
+    const remove = source.slice(source.indexOf("export const deleteRecipeMedia"));
+    expect(remove).toMatch(/cloudinary\.uploader\.destroy/);
+    expect(remove).toMatch(/Failed to delete media from Cloudinary/);
+  });
+});
