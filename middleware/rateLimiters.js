@@ -24,6 +24,21 @@ export const suggestLimiter = rateLimit({
   message: { message: "Too many requests, please slow down." },
 });
 
+// Applied to /api/search. The writeLimiter below leaves reads alone
+// because reads are cheap - but this one is not. A case-insensitive
+// substring match cannot use an index, so every call scans the whole
+// recipe and user collections, and the navbar fires one on every
+// keystroke. That is the same shape as the category suggestions, and it
+// gets the same budget: generous for real typing, low enough that it
+// cannot be used to hold the database down.
+export const searchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many searches, please slow down." },
+});
+
 // Everything that changes something.
 //
 // Only login and the category suggestions were limited, which left every
