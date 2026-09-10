@@ -7,3 +7,6 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 *.log
+
+# Scratch probes written while investigating; never part of the app.
+*.tmp.mjs
