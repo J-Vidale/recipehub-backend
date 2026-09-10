@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import streamifier from "streamifier";
 import Recipe from "../models/Recipe.js";
 import cloudinary from "../config/cloudinary.js";
+import { destroyQuietly } from "../utils/media.js";
 import {
   ALLOWED_MIME_TYPES,
   MAX_IMAGE_BYTES,
@@ -113,10 +114,12 @@ export const addRecipeMedia = async (req, res) => {
     res.status(201).json(updated);
   } catch (err) {
     // The Cloudinary upload already succeeded - clean it up so it doesn't
-    // linger as a billable, unreferenced asset.
-    await cloudinary.uploader
-      .destroy(uploadResult.public_id, { resource_type: resourceType })
-      .catch(() => {});
+    // linger as a billable, unreferenced asset. destroyQuietly rather than
+    // .catch(), which does not catch the synchronous throw destroy raises
+    // when the credentials are missing: thrown from inside this catch
+    // block, it would skip the response below entirely and the caller
+    // would get the error handler's generic 500 instead of this one.
+    await destroyQuietly(uploadResult.public_id, resourceType);
     res.status(500).json({
       message: "Failed to save recipe after upload",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
