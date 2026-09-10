@@ -27,6 +27,13 @@ const parsePagination = (query, defaultLimit = 20, maxLimit = 50) =>
 // messages already have limits; these bring recipes in line.
 export const MAX_TITLE_LENGTH = 140;
 export const MAX_INSTRUCTIONS_LENGTH = 10000;
+// The title, instructions and category all have a ceiling; the ingredient
+// list did not. A recipe could carry a megabyte of ingredient text, or a
+// hundred thousand entries, and every reader of that recipe would pay for
+// it. 60 characters is longer than any real ingredient name, and 100
+// entries is more than the longest recipe anyone writes.
+export const MAX_INGREDIENT_FIELD_LENGTH = 60;
+export const MAX_INGREDIENTS = 100;
 
 const sanitizeTitle = (raw) => {
   if (typeof raw !== "string") return { error: "Title is required" };
@@ -53,6 +60,9 @@ const validateIngredients = (ingredients) => {
   if (!Array.isArray(ingredients)) {
     return { error: "Ingredients must be an array" };
   }
+  if (ingredients.length > MAX_INGREDIENTS) {
+    return { error: `A recipe cannot have more than ${MAX_INGREDIENTS} ingredients` };
+  }
   for (const item of ingredients) {
     if (
       !item ||
@@ -62,6 +72,14 @@ const validateIngredients = (ingredients) => {
       !item.amount.trim()
     ) {
       return { error: "Each ingredient needs a name and an amount" };
+    }
+    if (
+      item.name.trim().length > MAX_INGREDIENT_FIELD_LENGTH ||
+      item.amount.trim().length > MAX_INGREDIENT_FIELD_LENGTH
+    ) {
+      return {
+        error: `An ingredient name or amount cannot exceed ${MAX_INGREDIENT_FIELD_LENGTH} characters`,
+      };
     }
   }
   return {
