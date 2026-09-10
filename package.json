@@ -11,7 +11,8 @@
     "start": "node --import ./config/instrument.js server.js",
     "dev": "nodemon --import ./config/instrument.js server.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs"
   },
   "keywords": [],
   "author": "",
