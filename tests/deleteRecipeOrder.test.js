@@ -42,7 +42,9 @@ const run = async () => {
     lean: async () => ({ _id: recipeId, user: userId, media: [{ publicId: "p1", type: "image" }] }),
   });
   vi.spyOn(Comment, "find").mockReturnValue({ distinct: async () => [] });
-  vi.spyOn(Recipe, "deleteOne").mockImplementation(note("recipe"));
+  // purgeRecipes takes a list, so one recipe is a deleteMany of one. The
+  // shared cascade is what deleting an account uses too.
+  vi.spyOn(Recipe, "deleteMany").mockImplementation(note("recipe"));
   vi.spyOn(CommentLike, "deleteMany").mockImplementation(note("commentLikes"));
   vi.spyOn(Like, "deleteMany").mockImplementation(note("likes"));
   vi.spyOn(Share, "deleteMany").mockImplementation(note("shares"));

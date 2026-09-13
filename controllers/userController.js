@@ -5,6 +5,8 @@ import Recipe from '../models/Recipe.js';
 import Follow from '../models/Follow.js';
 import cloudinary from '../config/cloudinary.js';
 import { destroyQuietly } from '../utils/media.js';
+import { deleteAccount as purgeAccount } from '../utils/deleteAccount.js';
+import bcrypt from 'bcryptjs';
 import { ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../middleware/uploadMiddleware.js';
 
 // Get logged-in user info
@@ -130,4 +132,37 @@ export const deleteAvatar = async (req, res) => {
   await destroyQuietly(publicId);
 
   res.json({ avatarUrl: null });
+};
+
+// DELETE /api/users/me   body: { password }
+//
+// The password is required even though the caller is already
+// authenticated. A token is something that can be taken - left on a
+// shared machine, lifted by a script - and every other thing a stolen
+// token can do is reversible by its owner. This one is not, so it asks
+// for something only the account holder knows.
+export const deleteMyAccount = async (req, res) => {
+  const { password } = req.body ?? {};
+  if (typeof password !== 'string' || !password) {
+    return res.status(400).json({ message: 'Your password is required to delete your account' });
+  }
+
+  const user = await User.findById(req.user._id).select('+password');
+  if (!user) {
+    return res.status(404).json({ message: 'Account not found' });
+  }
+
+  const matches = await bcrypt.compare(password, user.password);
+  if (!matches) {
+    // 403, not 401. The session is perfectly valid - it is the extra
+    // confirmation that failed. A 401 means "your credentials are missing
+    // or invalid", and the client acts on that by clearing the session and
+    // sending the caller to the login page, which is how mistyping your
+    // password here logged you out instead of saying you mistyped it.
+    return res.status(403).json({ message: 'That password is not correct' });
+  }
+
+  await purgeAccount(user._id);
+
+  res.json({ message: 'Your account and everything in it has been deleted' });
 };

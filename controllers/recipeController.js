@@ -13,6 +13,7 @@ import { parseHashtags } from "../utils/parseHashtags.js";
 import { getCached, setCached } from "../utils/cache.js";
 import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
 import { destroyQuietly } from "../utils/media.js";
+import { purgeRecipes } from "../utils/purgeRecipes.js";
 import { parseListQuery, parsePageQuery, withCursor, buildPage } from "../utils/pagination.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
@@ -406,20 +407,8 @@ export const deleteRecipe = async (req, res) => {
     // by looking the recipe up and answers 404 when it is gone, so
     // removing it first closes the window for all of them at once.
     //
-    // Comment ids are collected before the row goes, because nothing here
-    // depends on the recipe document itself once it has been read.
-    const commentIds = await Comment.find({ recipe: recipe._id }).distinct("_id");
-    await Recipe.deleteOne({ _id: recipe._id });
-
-    await CommentLike.deleteMany({ comment: { $in: commentIds } });
-    await Like.deleteMany({ recipe: recipe._id });
-    await Share.deleteMany({ recipe: recipe._id });
-    await Comment.deleteMany({ recipe: recipe._id });
-    await Notification.deleteMany({ recipe: recipe._id });
-    await User.updateMany(
-      { savedRecipes: recipe._id },
-      { $pull: { savedRecipes: recipe._id } }
-    );
+    // The same cascade deleting an account uses, so the two cannot drift.
+    await purgeRecipes([recipe._id]);
 
     // Last, and best-effort: a Cloudinary hiccup on one asset must not
     // fail a delete that has already happened in the database.

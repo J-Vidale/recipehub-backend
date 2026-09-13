@@ -1,6 +1,6 @@
 // routes/userRoutes.js
 import express from "express";
-import { getMe, getUserProfile, uploadAvatar, deleteAvatar } from "../controllers/userController.js";
+import { getMe, getUserProfile, uploadAvatar, deleteAvatar, deleteMyAccount } from "../controllers/userController.js";
 import { getBlockedUsers } from "../controllers/blockController.js";
 import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 import { uploadSingleImage } from "../middleware/uploadMiddleware.js";
@@ -11,6 +11,9 @@ const router = express.Router();
 router.get("/me", protect, getMe);
 router.post("/me/avatar", uploadLimiter, protect, uploadSingleImage, uploadAvatar);
 router.delete("/me/avatar", protect, deleteAvatar);
+
+// Mounted before "/:id" so the literal path is not read as an id.
+router.delete("/me", protect, deleteMyAccount);
 router.get("/blocked", protect, getBlockedUsers);
 router.get("/:id", optionalAuth, getUserProfile);
 
