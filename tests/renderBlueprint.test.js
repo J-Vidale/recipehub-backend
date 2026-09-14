@@ -76,3 +76,48 @@ describe("render.yaml", () => {
     expect(blueprint).toMatch(/- key: NODE_ENV\n\s+value: production/);
   });
 });
+
+// Everything the code reads has to be described somewhere a deployer will
+// look. ADMIN_USERNAMES was added to render.yaml and to the startup
+// warnings and never to .env.example - which the README calls "the full
+// list", and which the deployment steps say to work through - so the one
+// variable standing between a moderation queue and nobody able to read it
+// was invisible to anyone following the instructions.
+describe(".env.example", () => {
+  it("describes every environment variable the code actually reads", async () => {
+    const { readdir } = await import("node:fs/promises");
+    const root = new URL("../", import.meta.url);
+    const skip = new Set(["node_modules", ".git", "tests", "coverage", "docs"]);
+
+    const sources = [];
+    const walk = async (dir) => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        if (skip.has(entry.name)) continue;
+        const child = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+        if (entry.isDirectory()) await walk(child);
+        else if (entry.name.endsWith(".js") || entry.name.endsWith(".mjs")) sources.push(child);
+      }
+    };
+    await walk(root);
+
+    const used = new Set();
+    for (const file of sources) {
+      const source = await readFile(file, "utf8");
+      // Catches process.env.FOO and the env.FOO of a function that takes
+      // the environment as an argument, which is how the admin list is
+      // read - and is exactly why a plain search for "process.env" missed
+      // it.
+      for (const [, key] of source.matchAll(/\benv\.([A-Z][A-Z0-9_]*)/g)) used.add(key);
+    }
+
+    // Guards the walk above: an empty set would pass vacuously.
+    expect(used.has("MONGO_URI")).toBe(true);
+    expect(used.size).toBeGreaterThan(8);
+
+    for (const key of [...used].sort()) {
+      expect(envExample, `.env.example does not mention ${key}`).toMatch(
+        new RegExp(`^${key}=`, "m")
+      );
+    }
+  });
+});
