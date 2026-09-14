@@ -2,6 +2,7 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { mintedBeforePasswordChange } from "../utils/tokenFreshness.js";
 
 let io = null;
 
@@ -18,6 +19,36 @@ let io = null;
 // side; polling (already in place for notifications) stays as the
 // fallback that guarantees eventual consistency regardless of connection
 // state.
+// Who a handshake token belongs to, or a refusal.
+//
+// Lifted out of io.use so it can be exercised on its own: the handshake is
+// the only place a socket's token is ever looked at, which makes it the
+// one place a mistake here would not show up until someone was reading
+// another person's messages.
+export const authorizeSocket = async (token) => {
+  if (!token) throw new Error("Not authorized, no token");
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    throw new Error("Invalid token");
+  }
+
+  const user = await User.findById(decoded.id).select("_id passwordChangedAt").lean();
+  if (!user) throw new Error("User not found");
+
+  // The same rule protect() applies. Without it, changing a password
+  // ended every HTTP session and left this one open: a stolen token still
+  // opened a socket and kept receiving that person's messages and
+  // notifications live, which is the opposite of what the change is for.
+  if (mintedBeforePasswordChange(decoded, user)) {
+    throw new Error("Session ended");
+  }
+
+  return user._id.toString();
+};
+
 export const initSocket = (httpServer, allowedOrigins) => {
   io = new Server(httpServer, {
     cors: {
@@ -27,20 +58,11 @@ export const initSocket = (httpServer, allowedOrigins) => {
   });
 
   io.use(async (socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (!token) {
-      return next(new Error("Not authorized, no token"));
-    }
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.id).select("_id").lean();
-      if (!user) {
-        return next(new Error("User not found"));
-      }
-      socket.userId = user._id.toString();
+      socket.userId = await authorizeSocket(socket.handshake.auth?.token);
       next();
     } catch (err) {
-      next(new Error("Invalid token"));
+      next(err);
     }
   });
 
@@ -58,4 +80,19 @@ export const initSocket = (httpServer, allowedOrigins) => {
 export const emitToUser = (userId, event, payload) => {
   if (!io) return;
   io.to(`user:${userId}`).emit(event, payload);
+};
+
+// Closes every socket this user currently has open.
+//
+// Rejecting old tokens at the handshake only stops new connections. A
+// socket opened before the password changed stays connected and keeps
+// receiving, because the handshake is the only place its token is ever
+// looked at. Changing a password says every other device has been signed
+// out, so this is what makes that true of the live connection as well.
+//
+// Best-effort, like every other emit here: a no-op before Socket.IO is
+// initialised, and never load-bearing for the action that called it.
+export const disconnectUser = (userId) => {
+  if (!io) return;
+  io.in(`user:${userId}`).disconnectSockets(true);
 };

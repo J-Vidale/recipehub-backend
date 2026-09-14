@@ -13,6 +13,7 @@ import Report from "../models/Report.js";
 import User from "../models/User.js";
 import { purgeRecipes } from "./purgeRecipes.js";
 import { destroyQuietly } from "./media.js";
+import { disconnectUser } from "../config/socket.js";
 
 // bulkWrite rejects an empty list, and every one of these is empty for
 // somebody - a new account has no likes, most have no blocks.
@@ -135,6 +136,11 @@ export const deleteAccount = async (userId) => {
   // and outlive it. Same reasoning as removing a recipe before its likes,
   // applied to the whole account at once.
   await User.deleteOne({ _id: userId });
+
+  // And their live connection, which the handshake is the only place that
+  // ever checks. It would otherwise stay open on a deleted account until
+  // the process restarts or the tab closes.
+  disconnectUser(String(userId));
 
   // Their own recipes, and everything anyone else left on them.
   await purgeRecipes(recipeIds);

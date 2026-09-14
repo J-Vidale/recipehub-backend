@@ -1,19 +1,11 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-
-/**
- * A token minted before the password changed is no longer good.
- *
- * Tokens are stateless and last a week, so without this a password change
- * left every session that already existed still working - including the
- * one whose existence prompted the change. iat is in whole seconds;
- * passwordChangedAt is stored a second early to keep the token issued
- * moments after a change from being caught by its own rule.
- */
-const mintedBeforePasswordChange = (decoded, user) => {
-  if (!user?.passwordChangedAt || !decoded?.iat) return false;
-  return decoded.iat * 1000 < new Date(user.passwordChangedAt).getTime();
-};
+// A token minted before the password changed is no longer good. Tokens are
+// stateless and last a week, so without this a password change left every
+// session that already existed still working - including the one whose
+// existence prompted the change. Shared with the socket handshake, which
+// has to apply the same rule.
+import { mintedBeforePasswordChange } from '../utils/tokenFreshness.js';
 
 export const protect = async (req, res, next) => {
   let token = req.headers.authorization?.startsWith('Bearer')
