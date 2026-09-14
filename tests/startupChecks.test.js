@@ -13,6 +13,7 @@ const complete = {
   CLOUDINARY_API_KEY: "123456789",
   CLOUDINARY_API_SECRET: "secret",
   CORS_ORIGINS: "https://recipehub.example.com",
+  ADMIN_USERNAMES: "marta_cooks",
 };
 
 const warningsFor = (overrides) => collectStartupWarnings({ ...complete, ...overrides });
@@ -21,6 +22,17 @@ const joined = (overrides) => warningsFor(overrides).join(" | ");
 describe("collectStartupWarnings", () => {
   it("says nothing when everything is configured", () => {
     expect(collectStartupWarnings(complete)).toEqual([]);
+  });
+
+  // A site can run with nobody moderating, but then reports pile up
+  // unread and nothing says so - which is the state the variable exists
+  // to get out of.
+  it("says when nobody can read the reports members file", () => {
+    expect(joined({ ADMIN_USERNAMES: "" })).toMatch(/ADMIN_USERNAMES is not set/);
+  });
+
+  it("stays quiet about moderators outside production", () => {
+    expect(joined({ NODE_ENV: "development", ADMIN_USERNAMES: "" })).not.toMatch(/ADMIN_USERNAMES/);
   });
 
   it("names MONGO_URI when it is missing", () => {
