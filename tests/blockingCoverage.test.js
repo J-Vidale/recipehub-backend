@@ -4,6 +4,7 @@ import Recipe from "../models/Recipe.js";
 import Like from "../models/Like.js";
 import Share from "../models/Share.js";
 import Block from "../models/Block.js";
+import Comment from "../models/Comment.js";
 import { likeRecipe } from "../controllers/likeController.js";
 import { shareRecipe } from "../controllers/shareController.js";
 
@@ -76,11 +77,106 @@ describe("the block check itself", () => {
       "likeController.js",
       "shareController.js",
       "commentController.js",
+      "commentLikeController.js",
       "followController.js",
       "messageController.js",
     ]) {
       const source = await readFile(new URL(`../controllers/${file}`, import.meta.url), "utf8");
       expect(source, `${file} does not check for a block`).toMatch(/isBlockedEitherWay/);
     }
+  });
+});
+
+// The two places the check was missing. Both hang off a comment, and a
+// comment's author is not the recipe's owner - which is the only person
+// the checks above guard. So blocking someone stopped them touching your
+// recipes and left your comments, on anybody's recipe, open to them.
+describe("interactions that hang off a comment, not a recipe", () => {
+  const otherRecipeOwner = new mongoose.Types.ObjectId();
+  const commentId = new mongoose.Types.ObjectId();
+
+  // isBlockedEitherWay is called once per party. Answer per party rather
+  // than a flat true/false, so a test can say "the recipe's owner has not
+  // blocked me, the comment's author has" - the case that was open.
+  const blockBetween = (...blockedParties) => {
+    const ids = blockedParties.map(String);
+    vi.spyOn(Block, "findOne").mockImplementation((query) => ({
+      select: () => ({
+        lean: async () =>
+          ids.includes(String(query.$or[0].blocked)) ? { _id: "b" } : null,
+      }),
+    }));
+  };
+
+  it("liking a comment by someone who blocked you is refused", async () => {
+    const { likeComment } = await import("../controllers/commentLikeController.js");
+    const CommentLike = (await import("../models/CommentLike.js")).default;
+    blockBetween(owner);
+    vi.spyOn(Comment, "findById").mockResolvedValue({ _id: commentId, user: owner });
+    const create = vi.spyOn(CommentLike, "create").mockResolvedValue({});
+
+    const r = res();
+    await likeComment({ params: { commentId: commentId.toString() }, user: { _id: me } }, r);
+
+    expect(r.statusCode).toBe(403);
+    expect(r.body.message).toMatch(/cannot like this comment/i);
+    expect(create, "the like went through anyway").not.toHaveBeenCalled();
+  });
+
+  it("liking a comment still works when nobody is blocked", async () => {
+    const { likeComment } = await import("../controllers/commentLikeController.js");
+    const CommentLike = (await import("../models/CommentLike.js")).default;
+    blockBetween();
+    vi.spyOn(Comment, "findById").mockResolvedValue({ _id: commentId, user: owner });
+    vi.spyOn(CommentLike, "create").mockResolvedValue({});
+    vi.spyOn(Comment, "findByIdAndUpdate").mockResolvedValue({ likeCount: 1 });
+
+    const r = res();
+    await likeComment({ params: { commentId: commentId.toString() }, user: { _id: me } }, r);
+
+    expect(r.statusCode, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.likeCount).toBe(1);
+  });
+
+  it("unliking a comment stays open, so a block cannot strand your like", async () => {
+    const { unlikeComment } = await import("../controllers/commentLikeController.js");
+    const CommentLike = (await import("../models/CommentLike.js")).default;
+    blockBetween(owner);
+    vi.spyOn(Comment, "findById").mockResolvedValue({ _id: commentId, user: owner });
+    vi.spyOn(CommentLike, "findOneAndDelete").mockResolvedValue({ _id: "row" });
+    vi.spyOn(Comment, "findOneAndUpdate").mockResolvedValue({ likeCount: 0 });
+
+    const r = res();
+    await unlikeComment({ params: { commentId: commentId.toString() }, user: { _id: me } }, r);
+
+    expect(r.statusCode, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.likedByMe).toBe(false);
+  });
+
+  it("replying to a comment by someone who blocked you is refused", async () => {
+    const { addComment } = await import("../controllers/commentController.js");
+    // The recipe belongs to a third party who has blocked nobody: the only
+    // block is the one between the replier and the comment's author.
+    blockBetween(owner);
+    const recipe = { _id: recipeId, user: otherRecipeOwner };
+    vi.spyOn(Recipe, "findById").mockReturnValue({ lean: async () => recipe });
+    vi.spyOn(Comment, "findById").mockReturnValue({
+      lean: async () => ({ _id: commentId, recipe: recipeId, user: owner, parentComment: null }),
+    });
+    const create = vi.spyOn(Comment, "create").mockResolvedValue({});
+
+    const r = res();
+    await addComment(
+      {
+        params: { id: recipeId.toString() },
+        body: { text: "hello", parentComment: commentId.toString() },
+        user: { _id: me },
+      },
+      r
+    );
+
+    expect(r.statusCode).toBe(403);
+    expect(r.body.message).toMatch(/cannot reply to this comment/i);
+    expect(create, "the reply went through anyway").not.toHaveBeenCalled();
   });
 });
