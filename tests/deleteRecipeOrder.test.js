@@ -6,6 +6,7 @@ import CommentLike from "../models/CommentLike.js";
 import Like from "../models/Like.js";
 import Share from "../models/Share.js";
 import Notification from "../models/Notification.js";
+import Report from "../models/Report.js";
 import User from "../models/User.js";
 import { deleteRecipe } from "../controllers/recipeController.js";
 
@@ -50,6 +51,7 @@ const run = async () => {
   vi.spyOn(Share, "deleteMany").mockImplementation(note("shares"));
   vi.spyOn(Comment, "deleteMany").mockImplementation(note("comments"));
   vi.spyOn(Notification, "deleteMany").mockImplementation(note("notifications"));
+  vi.spyOn(Report, "deleteMany").mockImplementation(note("reports"));
   vi.spyOn(User, "updateMany").mockImplementation(note("savedRecipes"));
 
   const r = res();
@@ -67,7 +69,9 @@ describe("deleting a recipe", () => {
   it("still clears every dependent record", async () => {
     const { order } = await run();
     expect(order.slice(1).sort()).toEqual(
-      ["commentLikes", "comments", "likes", "notifications", "savedRecipes", "shares"].sort()
+      // Reports name their target by id and nothing else, so one about a
+      // deleted recipe is a row pointing at nothing.
+      ["commentLikes", "comments", "likes", "notifications", "reports", "savedRecipes", "shares"].sort()
     );
   });
 

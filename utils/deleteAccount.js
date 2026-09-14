@@ -54,6 +54,7 @@ const removeTheirComments = async (userId) => {
   await Comment.deleteMany({ _id: { $in: allIds } });
   await CommentLike.deleteMany({ comment: { $in: allIds } });
   await Notification.deleteMany({ comment: { $in: allIds } });
+  await Report.deleteMany({ targetType: "comment", targetId: { $in: allIds } });
 
   // One write per recipe rather than one per comment.
   const perRecipe = new Map();
