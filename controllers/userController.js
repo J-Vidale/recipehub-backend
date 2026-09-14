@@ -7,6 +7,7 @@ import Block from '../models/Block.js';
 import { isAdmin } from '../middleware/adminMiddleware.js';
 import cloudinary from '../config/cloudinary.js';
 import { destroyQuietly } from '../utils/media.js';
+import { captureError } from '../config/monitoring.js';
 import { deleteAccount as purgeAccount } from '../utils/deleteAccount.js';
 import bcrypt from 'bcryptjs';
 import { ALLOWED_MIME_TYPES, MAX_IMAGE_BYTES } from '../middleware/uploadMiddleware.js';
@@ -109,6 +110,9 @@ export const uploadAvatar = async (req, res) => {
   try {
     uploadResult = await uploadBufferToCloudinary(req.file.buffer);
   } catch (err) {
+    // As in mediaController: a failure answered here never reaches the
+    // error middleware, which is the only thing Sentry is wired to.
+    captureError(err, { where: 'uploadAvatar', userId: String(req.user._id) });
     return res.status(502).json({
       message: 'Avatar upload failed',
       error: process.env.NODE_ENV === 'development' ? err.message : undefined,

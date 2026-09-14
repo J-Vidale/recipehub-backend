@@ -4,6 +4,7 @@ import streamifier from "streamifier";
 import Recipe from "../models/Recipe.js";
 import cloudinary from "../config/cloudinary.js";
 import { destroyQuietly } from "../utils/media.js";
+import { captureError } from "../config/monitoring.js";
 import {
   ALLOWED_MIME_TYPES,
   MAX_IMAGE_BYTES,
@@ -96,6 +97,11 @@ export const addRecipeMedia = async (req, res) => {
   try {
     uploadResult = await uploadBufferToCloudinary(req.file.buffer, resourceType);
   } catch (err) {
+    // Handled here rather than re-thrown, so the caller gets a 502 that
+    // says which half failed. Sentry's error handler only sees what
+    // reaches the error middleware, so a swallowed upstream failure was
+    // invisible - report it explicitly.
+    captureError(err, { where: "addRecipeMedia.upload", recipeId: String(recipe._id) });
     return res.status(502).json({
       message: "Media upload failed",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
@@ -120,6 +126,7 @@ export const addRecipeMedia = async (req, res) => {
     // block, it would skip the response below entirely and the caller
     // would get the error handler's generic 500 instead of this one.
     await destroyQuietly(uploadResult.public_id, resourceType);
+    captureError(err, { where: "addRecipeMedia.save", recipeId: String(recipe._id) });
     res.status(500).json({
       message: "Failed to save recipe after upload",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,
@@ -141,6 +148,7 @@ export const deleteRecipeMedia = async (req, res) => {
       resource_type: mediaItem.type === "video" ? "video" : "image",
     });
   } catch (err) {
+    captureError(err, { where: "deleteRecipeMedia", recipeId: String(recipe._id) });
     return res.status(502).json({
       message: "Failed to delete media from Cloudinary",
       error: process.env.NODE_ENV === "development" ? err.message : undefined,

@@ -183,9 +183,6 @@ export const getAllRecipes = async (req, res) => {
   }
   parsedLimit = Math.min(parsedLimit, 50);
 
-  // The "newest" branch is ordered by _id and can use a cursor; the
-  // discover branch below is a ranked, cached feed that cannot, so it
-  // takes its skip from the page number only.
   // The "newest" branch is ordered by _id and pages by cursor. The
   // discover branch below is a ranked, cached feed whose order is not _id,
   // so it always pages by number: reusing one skip for both meant that
@@ -195,65 +192,63 @@ export const getAllRecipes = async (req, res) => {
   const { skip: discoverSkip } = parsePageQuery(req.query, parsedLimit, 50);
   const newestSkip = cursor ? 0 : discoverSkip;
 
-  try {
-    if (sort === "newest") {
-      const recipes = await Recipe.find(withCursor({}, cursor))
-        .sort({ _id: -1 })
-        .skip(newestSkip)
-        .limit(parsedLimit + 1)
-        .populate("user", "username avatarUrl")
-        .lean();
+  if (sort === "newest") {
+    const recipes = await Recipe.find(withCursor({}, cursor))
+      .sort({ _id: -1 })
+      .skip(newestSkip)
+      .limit(parsedLimit + 1)
+      .populate("user", "username avatarUrl")
+      .lean();
 
-      const { items, hasMore, nextCursor } = buildPage(recipes, parsedLimit);
-      return res.json({ recipes: items, page: parsedPage, hasMore, nextCursor });
-    }
-
-    const cacheKey = `discover:page=${parsedPage}:limit=${parsedLimit}`;
-    const cached = await getCached(cacheKey);
-    if (cached) {
-      return res.json(cached);
-    }
-
-    const recipes = await Recipe.aggregate([
-      {
-        $addFields: {
-          ageInHours: {
-            $divide: [{ $subtract: [new Date(), "$createdAt"] }, 1000 * 60 * 60],
-          },
-        },
-      },
-      {
-        $addFields: {
-          trendingScore: {
-            $divide: [
-              {
-                $add: [
-                  { $multiply: ["$shareCount", 4] },
-                  { $multiply: ["$saveCount", 3] },
-                  { $multiply: ["$commentCount", 2] },
-                  { $multiply: ["$likeCount", 1] },
-                ],
-              },
-              { $pow: [{ $add: ["$ageInHours", 2] }, 1.5] },
-            ],
-          },
-        },
-      },
-      { $sort: { trendingScore: -1, _id: -1 } },
-      { $skip: discoverSkip },
-      { $limit: parsedLimit + 1 },
-    ]);
-
-    const hasMore = recipes.length > parsedLimit;
-    const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
-    await Recipe.populate(page, { path: "user", select: "username avatarUrl" });
-
-    const responseBody = { recipes: page, page: parsedPage, hasMore };
-    setCached(cacheKey, responseBody, DISCOVER_CACHE_TTL_SECONDS);
-    res.json(responseBody);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch recipes" });
+    const { items, hasMore, nextCursor } = buildPage(recipes, parsedLimit);
+    return res.json({ recipes: items, page: parsedPage, hasMore, nextCursor });
   }
+
+  const cacheKey = `discover:page=${parsedPage}:limit=${parsedLimit}`;
+  const cached = await getCached(cacheKey);
+  if (cached) {
+    return res.json(cached);
+  }
+
+  const recipes = await Recipe.aggregate([
+    {
+      $addFields: {
+        ageInHours: {
+          $divide: [{ $subtract: [new Date(), "$createdAt"] }, 1000 * 60 * 60],
+        },
+      },
+    },
+    {
+      $addFields: {
+        trendingScore: {
+          $divide: [
+            {
+              $add: [
+                { $multiply: ["$shareCount", 4] },
+                { $multiply: ["$saveCount", 3] },
+                { $multiply: ["$commentCount", 2] },
+                { $multiply: ["$likeCount", 1] },
+              ],
+            },
+            { $pow: [{ $add: ["$ageInHours", 2] }, 1.5] },
+          ],
+        },
+      },
+    },
+    { $sort: { trendingScore: -1, _id: -1 } },
+    { $skip: discoverSkip },
+    { $limit: parsedLimit + 1 },
+  ]);
+
+  const hasMore = recipes.length > parsedLimit;
+  // Not `page`: that name is already the requested page number, destructured
+  // from the query at the top of this handler.
+  const pageItems = hasMore ? recipes.slice(0, parsedLimit) : recipes;
+  await Recipe.populate(pageItems, { path: "user", select: "username avatarUrl" });
+
+  const responseBody = { recipes: pageItems, page: parsedPage, hasMore };
+  setCached(cacheKey, responseBody, DISCOVER_CACHE_TTL_SECONDS);
+  res.json(responseBody);
 };
 
 // GET /api/recipes/feed
@@ -270,32 +265,28 @@ export const getFollowingFeed = async (req, res) => {
   }
   parsedLimit = Math.min(parsedLimit, 50);
 
-  try {
-    const followingIds = await Follow.find({ follower: req.user._id }).distinct("following");
+  const followingIds = await Follow.find({ follower: req.user._id }).distinct("following");
 
-    if (followingIds.length === 0) {
-      return res.json({ recipes: [], nextCursor: null });
-    }
-
-    const query = { user: { $in: followingIds } };
-    if (cursor) {
-      query._id = { $lt: cursor };
-    }
-
-    const recipes = await Recipe.find(query)
-      .sort({ _id: -1 })
-      .limit(parsedLimit + 1)
-      .populate("user", "username avatarUrl")
-      .lean();
-
-    const hasMore = recipes.length > parsedLimit;
-    const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
-    const nextCursor = hasMore ? page[page.length - 1]._id : null;
-
-    res.json({ recipes: page, nextCursor });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch feed" });
+  if (followingIds.length === 0) {
+    return res.json({ recipes: [], nextCursor: null });
   }
+
+  const query = { user: { $in: followingIds } };
+  if (cursor) {
+    query._id = { $lt: cursor };
+  }
+
+  const recipes = await Recipe.find(query)
+    .sort({ _id: -1 })
+    .limit(parsedLimit + 1)
+    .populate("user", "username avatarUrl")
+    .lean();
+
+  const hasMore = recipes.length > parsedLimit;
+  const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
+  const nextCursor = hasMore ? page[page.length - 1]._id : null;
+
+  res.json({ recipes: page, nextCursor });
 };
 
 // GET /api/recipes/mine
@@ -316,15 +307,11 @@ export const getSingleRecipe = async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
-  try {
-    const recipe = await Recipe.findById(req.params.id).populate("user", "username avatarUrl").lean();
-    if (!recipe) {
-      return res.status(404).json({ message: "Recipe not found" });
-    }
-    res.json(recipe);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch recipe" });
+  const recipe = await Recipe.findById(req.params.id).populate("user", "username avatarUrl").lean();
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
   }
+  res.json(recipe);
 };
 
 // PUT /api/recipes/:id
@@ -385,46 +372,39 @@ export const deleteRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
 
-  try {
-    const recipe = await Recipe.findById(req.params.id).lean();
+  const recipe = await Recipe.findById(req.params.id).lean();
 
-    if (!recipe) {
-      return res.status(404).json({ message: "Recipe not found" });
-    }
-
-    if (recipe.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    // The recipe row goes first, and everything that hung off it follows.
-    //
-    // The other order left a window: the recipe stayed visible - and so
-    // likeable, savable, commentable, shareable - through the Cloudinary
-    // round trips and every cascade delete. A like arriving after
-    // Like.deleteMany survived as an orphan; a save arriving after the
-    // $pull below left a phantom entry in someone's saved list, pointing
-    // at a recipe that no longer exists. Every one of those paths starts
-    // by looking the recipe up and answers 404 when it is gone, so
-    // removing it first closes the window for all of them at once.
-    //
-    // The same cascade deleting an account uses, so the two cannot drift.
-    await purgeRecipes([recipe._id]);
-
-    // Last, and best-effort: a Cloudinary hiccup on one asset must not
-    // fail a delete that has already happened in the database.
-    await Promise.all(
-      recipe.media.map((item) =>
-        destroyQuietly(item.publicId, item.type === "video" ? "video" : "image")
-      )
-    );
-
-    res.json({ message: "Recipe deleted" });
-  } catch (err) {
-    res.status(500).json({
-      message: "Failed to delete recipe",
-      error: process.env.NODE_ENV === "development" ? err.message : undefined,
-    });
+  if (!recipe) {
+    return res.status(404).json({ message: "Recipe not found" });
   }
+
+  if (recipe.user.toString() !== req.user._id.toString()) {
+    return res.status(403).json({ message: "Not authorized" });
+  }
+
+  // The recipe row goes first, and everything that hung off it follows.
+  //
+  // The other order left a window: the recipe stayed visible - and so
+  // likeable, savable, commentable, shareable - through the Cloudinary
+  // round trips and every cascade delete. A like arriving after
+  // Like.deleteMany survived as an orphan; a save arriving after the
+  // $pull below left a phantom entry in someone's saved list, pointing
+  // at a recipe that no longer exists. Every one of those paths starts
+  // by looking the recipe up and answers 404 when it is gone, so
+  // removing it first closes the window for all of them at once.
+  //
+  // The same cascade deleting an account uses, so the two cannot drift.
+  await purgeRecipes([recipe._id]);
+
+  // Last, and best-effort: a Cloudinary hiccup on one asset must not
+  // fail a delete that has already happened in the database.
+  await Promise.all(
+    recipe.media.map((item) =>
+      destroyQuietly(item.publicId, item.type === "video" ? "video" : "image")
+    )
+  );
+
+  res.json({ message: "Recipe deleted" });
 };
 
 // GET /api/recipes/user/:userId
@@ -479,13 +459,9 @@ export const getPopularTags = async (req, res) => {
 
 // GET /api/recipes/saved
 export const getSavedRecipes = async (req, res) => {
-  try {
-    // This assumes you have a "savedRecipes" field on the User model that is an array of Recipe IDs
-    const user = await User.findById(req.user._id).populate("savedRecipes").lean();
-    res.json(user.savedRecipes || []);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch saved recipes" });
-  }
+  // This assumes you have a "savedRecipes" field on the User model that is an array of Recipe IDs
+  const user = await User.findById(req.user._id).populate("savedRecipes").lean();
+  res.json(user.savedRecipes || []);
 };
 
 // Save a recipe
@@ -494,26 +470,22 @@ export const saveRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
 
-  try {
-    const recipeExists = await Recipe.exists({ _id: req.params.recipeId });
-    if (!recipeExists) {
-      return res.status(404).json({ message: "Recipe not found" });
-    }
-
-    const result = await User.updateOne(
-      { _id: req.user._id },
-      { $addToSet: { savedRecipes: req.params.recipeId } }
-    );
-    if (result.modifiedCount > 0) {
-      await Recipe.updateOne(
-        { _id: req.params.recipeId },
-        { $inc: { saveCount: 1 } }
-      );
-    }
-    res.json({ message: "Recipe saved" });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to save recipe" });
+  const recipeExists = await Recipe.exists({ _id: req.params.recipeId });
+  if (!recipeExists) {
+    return res.status(404).json({ message: "Recipe not found" });
   }
+
+  const result = await User.updateOne(
+    { _id: req.user._id },
+    { $addToSet: { savedRecipes: req.params.recipeId } }
+  );
+  if (result.modifiedCount > 0) {
+    await Recipe.updateOne(
+      { _id: req.params.recipeId },
+      { $inc: { saveCount: 1 } }
+    );
+  }
+  res.json({ message: "Recipe saved" });
 };
 
 // Unsave a recipe
@@ -522,19 +494,15 @@ export const unsaveRecipe = async (req, res) => {
     return res.status(400).json({ message: "Invalid recipe ID" });
   }
 
-  try {
-    const result = await User.updateOne(
-      { _id: req.user._id },
-      { $pull: { savedRecipes: req.params.recipeId } }
+  const result = await User.updateOne(
+    { _id: req.user._id },
+    { $pull: { savedRecipes: req.params.recipeId } }
+  );
+  if (result.modifiedCount > 0) {
+    await Recipe.updateOne(
+      { _id: req.params.recipeId, saveCount: { $gt: 0 } },
+      { $inc: { saveCount: -1 } }
     );
-    if (result.modifiedCount > 0) {
-      await Recipe.updateOne(
-        { _id: req.params.recipeId, saveCount: { $gt: 0 } },
-        { $inc: { saveCount: -1 } }
-      );
-    }
-    res.json({ message: "Recipe unsaved" });
-  } catch (err) {
-    res.status(500).json({ message: "Failed to unsave recipe" });
   }
+  res.json({ message: "Recipe unsaved" });
 };
