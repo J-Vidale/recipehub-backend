@@ -17,6 +17,9 @@ const reportSchema = new mongoose.Schema(
 );
 
 reportSchema.index({ targetType: 1, targetId: 1 });
+// Backs the duplicate check in createReport, which runs on every report
+// filed and would otherwise scan the whole collection.
+reportSchema.index({ reporter: 1, targetType: 1, targetId: 1, status: 1 });
 reportSchema.index({ status: 1, _id: -1 });
 
 export default mongoose.model("Report", reportSchema);

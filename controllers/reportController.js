@@ -28,6 +28,38 @@ export const createReport = async (req, res) => {
       .json({ message: `Reason cannot exceed ${MAX_REASON_LENGTH} characters` });
   }
 
+  // Nothing checked that the thing being reported existed, or that it was
+  // not the reporter's own, or that they had not already reported it. A
+  // report is a row a moderator has to read, so each of those is a way to
+  // fill the queue with rows nobody can act on - and the last one needs no
+  // ill intent at all, just a second click on a button that gave no sign
+  // the first one worked.
+  const target = await findReportTarget(targetType, targetId);
+  if (!target) {
+    return res.status(404).json({ message: "That no longer exists" });
+  }
+  if (String(target.owner) === String(req.user._id)) {
+    return res.status(400).json({ message: "You cannot report your own content" });
+  }
+
+  // Only open reports count as duplicates: once a moderator has reviewed
+  // one, the same person reporting the same thing again is new
+  // information, not a repeat.
+  const existing = await Report.findOne({
+    reporter: req.user._id,
+    targetType,
+    targetId,
+    status: "open",
+  })
+    .select("_id")
+    .lean();
+
+  if (existing) {
+    // Deliberately not an error. From where the reporter is standing they
+    // did the right thing; telling them it failed invites a third try.
+    return res.json({ message: "You have already reported this", reportId: existing._id });
+  }
+
   const report = await Report.create({
     reporter: req.user._id,
     targetType,
@@ -36,6 +68,22 @@ export const createReport = async (req, res) => {
   });
 
   res.status(201).json({ message: "Report submitted", reportId: report._id });
+};
+
+// The reported thing, reduced to the one field createReport needs: who it
+// belongs to. A user report's "owner" is the account itself, so reporting
+// yourself falls out of the same comparison.
+const findReportTarget = async (targetType, targetId) => {
+  if (targetType === "recipe") {
+    const recipe = await Recipe.findById(targetId).select("user").lean();
+    return recipe && { owner: recipe.user };
+  }
+  if (targetType === "comment") {
+    const comment = await Comment.findById(targetId).select("user").lean();
+    return comment && { owner: comment.user };
+  }
+  const user = await User.findById(targetId).select("_id").lean();
+  return user && { owner: user._id };
 };
 
 const VALID_STATUSES = ["open", "reviewed"];
