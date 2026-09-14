@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import mongoose from "mongoose";
 import Recipe from "../models/Recipe.js";
 import Share from "../models/Share.js";
+import Block from "../models/Block.js";
 import { shareRecipe, unshareRecipe } from "../controllers/shareController.js";
 
 // Both handlers read the share count back after writing it, and both can
@@ -23,7 +24,14 @@ const res = () => ({
 afterEach(() => vi.restoreAllMocks());
 
 // Found at the top of the handler, gone by the time the count is read.
+// Sharing checks for a block before it does anything, so every case here
+// needs to say nobody is blocked.
+const nobodyBlocked = () => {
+  vi.spyOn(Block, "findOne").mockReturnValue({ select: () => ({ lean: async () => null }) });
+};
+
 const deletedUnderneath = () => {
+  nobodyBlocked();
   let call = 0;
   vi.spyOn(Recipe, "findById").mockImplementation(() => {
     call += 1;
@@ -61,6 +69,7 @@ describe("sharing a recipe that is deleted mid-request", () => {
   });
 
   it("still reports the real count when the recipe is there", async () => {
+    nobodyBlocked();
     vi.spyOn(Recipe, "findById").mockImplementation(() => ({
       lean: async () => ({ _id: recipeId, user: userId }),
       select: () => ({ lean: async () => ({ shareCount: 4 }) }),

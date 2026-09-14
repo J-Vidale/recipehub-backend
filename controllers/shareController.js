@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Recipe from "../models/Recipe.js";
 import Share from "../models/Share.js";
 import { createNotification } from "../utils/notify.js";
+import { isBlockedEitherWay } from "../utils/isBlocked.js";
 
 // POST /api/recipes/:id/share
 export const shareRecipe = async (req, res) => {
@@ -13,6 +14,14 @@ export const shareRecipe = async (req, res) => {
   const recipe = await Recipe.findById(req.params.id).lean();
   if (!recipe) {
     return res.status(404).json({ message: "Recipe not found" });
+  }
+
+  // Blocking already stops messaging, commenting and following. This was
+  // left open, and it notifies the recipe's owner - so a blocked person
+  // could put their name in someone's notifications as often as they
+  // liked, which is the thing blocking is for.
+  if (await isBlockedEitherWay(req.user._id, recipe.user)) {
+    return res.status(403).json({ message: "You cannot share this recipe" });
   }
 
   let created = true;

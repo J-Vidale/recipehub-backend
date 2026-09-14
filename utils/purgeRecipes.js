@@ -6,6 +6,7 @@ import Like from "../models/Like.js";
 import Share from "../models/Share.js";
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import Report from "../models/Report.js";
 
 /**
  * Remove recipes and everything that hangs off them.
@@ -43,4 +44,14 @@ export const purgeRecipes = async (recipeIds) => {
     { savedRecipes: { $in: recipeIds } },
     { $pull: { savedRecipes: { $in: recipeIds } } }
   );
+
+  // Reports name their target by id and nothing else, so a report about a
+  // recipe or a comment that no longer exists cannot be read or acted on -
+  // it is a row pointing at nothing. Cleared with the thing it was about.
+  await Report.deleteMany({
+    $or: [
+      { targetType: "recipe", targetId: { $in: recipeIds } },
+      { targetType: "comment", targetId: { $in: commentIds } },
+    ],
+  });
 };
