@@ -14,6 +14,16 @@ This is the backend API for **RecipeHub**, a MERN stack recipe sharing applicati
 - Personalized following feed, and a TikTok-inspired trending discover feed
 - Save/unsave recipes to your profile
 - View your own and saved recipes
+- Direct messages between two users, delivered live over Socket.IO
+- Notifications for likes, follows, comments, replies and shares
+- Search across recipe titles and usernames
+- Block another member, which cuts every interaction between you in both
+  directions and severs any follow either way
+- Report a recipe, member or comment, and a moderation queue for the
+  people named in `ADMIN_USERNAMES` to work through
+- Change your password, which ends every other session including live
+  socket connections
+- Delete your account, which removes everything you wrote along with it
 - RESTful API structure
 - MongoDB database with Mongoose models
 
@@ -53,6 +63,11 @@ keys. Two are worth knowing about beyond that:
   console. Unset, the API allows the local dev and preview servers and one
   Render URL from an earlier deployment, which a newly created service will
   not match.
+- `ADMIN_USERNAMES` — optional, but nothing can be moderated without it.
+  A comma-separated list of usernames, matched case-insensitively, who may
+  read the report queue and resolve reports. Unset means nobody: reports
+  are still filed and nobody can read them. The startup log warns when it
+  is unset in production.
 - `REDIS_URL` — optional. Unset, or unreachable, the app runs exactly as
   it would with it: caching is a performance layer, never a hard
   dependency. See "Caching" below.
@@ -80,11 +95,26 @@ The server will start on `http://localhost:5000`.
 ### **Auth**
 - `POST /api/auth/register` — Register a new user
 - `POST /api/auth/login` — Login and receive JWT
+- `PATCH /api/auth/password` — Change your password (protected). Body:
+  `{ currentPassword, newPassword }`. The current password is required even
+  though you are already signed in - a token is something that can be
+  taken, and this is the control that takes an account back. A wrong
+  current password answers 403, not 401, so mistyping it does not sign you
+  out. Every token minted before the change stops working, including open
+  socket connections, and a replacement token comes back in the response so
+  the device that made the change stays signed in.
 
 ### **User**
 - `GET /api/users/me` — Get current user info (protected)
 - `POST /api/users/me/avatar` — Upload/replace your profile picture (protected, multipart `file` field, image only, 8MB limit). Stored on Cloudinary; replaces the previous avatar if one exists.
 - `DELETE /api/users/me/avatar` — Remove your profile picture (protected)
+- `DELETE /api/users/me` — Delete your account (protected). Body:
+  `{ password }`, confirmed the same way and for the same reason as a
+  password change, and answered 403 rather than 401 when it is wrong.
+  Irreversible: it removes your recipes and everything anyone left on them,
+  what you left on other people's, your conversations and messages, your
+  follows, blocks, reports and notifications, and your images on Cloudinary,
+  and puts back every counter your activity had raised.
 - `GET /api/users/:id` — Get a user's public profile (`username`, `avatarUrl`, `followerCount`, `followingCount`, `recipeCount`, `createdAt`)
 - `POST /api/users/:id/follow` — Follow a user (protected, idempotent)
 - `DELETE /api/users/:id/follow` — Unfollow a user (protected, idempotent)
@@ -97,15 +127,25 @@ The server will start on `http://localhost:5000`.
 Blocking (either direction) prevents following and commenting between the two users. It does not currently filter blocked users' content out of feeds or search results — that's a larger, documented follow-up, not yet built.
 
 ### **Reports**
-- `POST /api/reports` — Report a recipe, user, or comment (protected). Body: `{ targetType: "recipe"|"user"|"comment", targetId, reason }`. Reports are captured for later review; there's no admin/moderation dashboard yet to act on them.
+- `POST /api/reports` — Report a recipe, user, or comment (protected). Body: `{ targetType: "recipe"|"user"|"comment", targetId, reason }`. Refused with 404 if the thing reported does not exist and 400 if it is your own. Reporting the same thing twice while the first report is still open answers 200 with that report's id rather than filing a second row - the reporter did the right thing, and telling them it failed invites a third try. Once a report has been reviewed, the same person reporting the same thing again is new information and is filed.
+- `GET /api/reports?status=<open|reviewed>&limit=<n>&cursor=<id>` — The moderation queue, newest first (protected, moderators only). Each report carries a `target` with the thing it is about, loaded in one query per kind, or `null` if it has since been deleted. Response: `{ reports, hasMore, nextCursor }`.
+- `PATCH /api/reports/:id` — Mark a report `open` or `reviewed` (protected, moderators only).
+
+Moderators are the usernames listed in `ADMIN_USERNAMES` (see Environment
+Variables). The two moderator endpoints answer **404**, not 403, to anyone
+else: a 403 would confirm both that the route exists and that somebody is
+allowed to use it, which is a free hint to anyone probing. `GET
+/api/users/me` reports `isAdmin` so the web client knows whether to offer
+the link - that is a hint for the interface, never the permission itself,
+which is decided here on every request.
 
 ### **Recipes**
 - `GET /api/recipes?page=<n>&limit=<n>&sort=<newest>` — Discover feed: all recipes ranked by trending score (shares weighted highest, then saves/comments/likes, decayed by age — matching how real platforms weight a share above a like), paginated. `page` defaults to 1, `limit` defaults to 20 (max 50). Pass `sort=newest` for plain chronological order instead. Response: `{ recipes, page, hasMore }`.
-- `GET /api/recipes/feed?cursor=<recipeId>&limit=<n>` — Following feed: recipes from users you follow, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Response: `{ recipes, nextCursor }`.
+- `GET /api/recipes/feed?cursor=<recipeId>&limit=<n>` — Following feed: recipes from users you follow, newest first (protected). Cursor-paginated; `limit` defaults to 20 (max 50). Each recipe carries `likedByMe`, resolved in one query for the whole page. Response: `{ recipes, nextCursor }`.
 - `GET /api/recipes/mine?page=<n>&limit=<n>` — Get your recipes, paginated (protected). Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/user/:userId?page=<n>&limit=<n>` — Get a user's recipes, paginated. Response: `{ recipes, page, hasMore }`.
 - `GET /api/recipes/tag/:tag?page=<n>&limit=<n>` — Get recipes tagged with `#tag`, paginated. Response: `{ recipes, page, hasMore, tag }`.
-- `GET /api/recipes/:id` — Get a single recipe
+- `GET /api/recipes/:id` — Get a single recipe. For a signed-in caller it also carries `likedByMe`, `sharedByMe` and `savedByMe`, so the page can draw the buttons correctly on arrival instead of asking separately. A signed-out caller gets `false` for all three and costs no extra query.
 - `POST /api/recipes` — Create a recipe (protected). Body: `{ title, instructions, category, ingredients }`, where `ingredients` is an array of `{ name, amount }`. `category` is free text, not restricted to the curated list (see Categories & Meals below) — trimmed, capped at 40 characters, and rejected with 400 if it contains profanity/slurs. `#hashtags` written in `instructions` are automatically parsed into the recipe's `tags` (max 30, deduped, case-insensitive) — no separate tags field to fill in.
 - `PUT /api/recipes/:id` — Update your recipe (protected). Same body shape as create; `ingredients`, if provided, replaces the recipe's full ingredient list. Updating `instructions` re-parses its hashtags.
 - `DELETE /api/recipes/:id` — Delete your recipe (protected)
@@ -119,7 +159,7 @@ Blocking (either direction) prevents following and commenting between the two us
 - `POST /api/recipes/:id/share` — Share/repost a recipe (protected, idempotent)
 - `DELETE /api/recipes/:id/share` — Undo a share (protected, idempotent)
 - `POST /api/recipes/:id/comments` — Comment on a recipe, or reply to a top-level comment via `parentComment` (protected)
-- `GET /api/recipes/:id/comments` — List a recipe's comments
+- `GET /api/recipes/:id/comments` — List a recipe's comments. For a signed-in caller each comment carries `likedByMe`, resolved in one query for the whole page.
 - `DELETE /api/recipes/:id/comments/:commentId` — Delete a comment (protected, comment author or recipe owner only)
 - `POST /api/recipes/:id/comments/:commentId/pin` — Pin a top-level comment to the top of the list (protected, recipe owner only)
 - `DELETE /api/recipes/:id/pin` — Unpin the recipe's pinned comment, if any (protected, recipe owner only)
@@ -181,6 +221,23 @@ handles getting back online; the notification bell's existing poll
 fallback that guarantees eventual consistency no matter what the socket
 connection is doing. Real-time is a latency improvement on top of that
 guarantee, not a replacement for it.
+
+The handshake is the only place a socket's token is ever read, which makes
+it the only place its identity is decided, so it applies the same rule
+`protect()` does: a token minted before its owner last changed their
+password is refused (`utils/tokenFreshness.js`). That stops the next
+connection; it cannot do anything about one already open, so changing a
+password — and deleting an account — also closes the sockets that predate
+it, with `disconnectUser(userId)`.
+
+That close is server-initiated, and Socket.IO deliberately does not retry
+one of those. Nor can the server tell one of your own sockets from
+anybody else's, so the device that made the change loses its connection
+along with the rest. The web client handles this by treating the token as
+state: a new one replaces the old in the auth context, and the socket
+provider, which depends on it, builds a fresh connection. A device holding
+the old token reconnects, is refused at the handshake, and is signed out
+by the API client's own 401 handling.
 
 ## Caching
 
