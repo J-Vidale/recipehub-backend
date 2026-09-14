@@ -6,6 +6,7 @@ import CommentLike from "../models/CommentLike.js";
 import Notification from "../models/Notification.js";
 import { createNotification } from "../utils/notify.js";
 import { isBlockedEitherWay } from "../utils/isBlocked.js";
+import { likedCommentIds } from "../utils/viewerState.js";
 
 const MAX_TEXT_LENGTH = 1000;
 const MAX_COMMENTS_LIMIT = 100;
@@ -183,7 +184,15 @@ export const getComments = async (req, res) => {
     });
   }
 
-  res.json(comments);
+  // One lookup for the page, so a comment you have already liked comes
+  // back drawn that way. The route carries optionalAuth; a logged-out
+  // reader gets false throughout without a query.
+  const liked = await likedCommentIds(req.user?._id, comments.map((comment) => comment._id));
+
+  res.json(comments.map((comment) => ({
+    ...comment,
+    likedByMe: liked.has(String(comment._id)),
+  })));
 };
 
 // DELETE /api/recipes/:id/comments/:commentId

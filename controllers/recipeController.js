@@ -14,6 +14,7 @@ import { getCached, setCached } from "../utils/cache.js";
 import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
 import { destroyQuietly } from "../utils/media.js";
 import { purgeRecipes } from "../utils/purgeRecipes.js";
+import { likedRecipeIds, sharedRecipeIds } from "../utils/viewerState.js";
 import { parseListQuery, parsePageQuery, withCursor, buildPage } from "../utils/pagination.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
@@ -286,7 +287,14 @@ export const getFollowingFeed = async (req, res) => {
   const page = hasMore ? recipes.slice(0, parsedLimit) : recipes;
   const nextCursor = hasMore ? page[page.length - 1]._id : null;
 
-  res.json({ recipes: page, nextCursor });
+  // One lookup for the whole page. This feed has a like button on every
+  // card, and all of them drew empty.
+  const liked = await likedRecipeIds(req.user._id, page.map((recipe) => recipe._id));
+
+  res.json({
+    recipes: page.map((recipe) => ({ ...recipe, likedByMe: liked.has(String(recipe._id)) })),
+    nextCursor,
+  });
 };
 
 // GET /api/recipes/mine
@@ -311,7 +319,23 @@ export const getSingleRecipe = async (req, res) => {
   if (!recipe) {
     return res.status(404).json({ message: "Recipe not found" });
   }
-  res.json(recipe);
+
+  // Whether this reader has already liked or shared it. Without these the
+  // page drew an empty heart and an unshared button no matter what you had
+  // done, and the only way to find out was to click and watch the answer
+  // come back. The route carries optionalAuth, so a logged-out reader gets
+  // false for both without a lookup.
+  const viewerId = req.user?._id;
+  const [liked, shared] = await Promise.all([
+    likedRecipeIds(viewerId, [recipe._id]),
+    sharedRecipeIds(viewerId, [recipe._id]),
+  ]);
+
+  res.json({
+    ...recipe,
+    likedByMe: liked.has(String(recipe._id)),
+    sharedByMe: shared.has(String(recipe._id)),
+  });
 };
 
 // PUT /api/recipes/:id

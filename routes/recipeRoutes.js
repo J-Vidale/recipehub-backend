@@ -25,7 +25,7 @@ import {
   pinComment,
   unpinComment,
 } from "../controllers/commentController.js";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect, optionalAuth } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -41,9 +41,12 @@ router
 router.route("/mine").get(protect, getMyRecipes);
 router.get("/feed", protect, getFollowingFeed);
 
+// optionalAuth, not protect: these stay public, but when there is a valid
+// token the handler can say whether this reader has already liked or
+// shared what it is returning.
 router
   .route("/:id")
-  .get(getSingleRecipe)
+  .get(optionalAuth, getSingleRecipe)
   .put(protect, updateRecipe)
   .delete(protect, deleteRecipe);
 
@@ -57,7 +60,7 @@ router.post("/:id/share", protect, shareRecipe);
 router.delete("/:id/share", protect, unshareRecipe);
 
 router.post("/:id/comments", protect, addComment);
-router.get("/:id/comments", getComments);
+router.get("/:id/comments", optionalAuth, getComments);
 router.delete("/:id/comments/:commentId", protect, deleteComment);
 
 router.post("/:id/comments/:commentId/pin", protect, pinComment);
