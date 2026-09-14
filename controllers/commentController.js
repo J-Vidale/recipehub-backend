@@ -56,6 +56,14 @@ export const addComment = async (req, res) => {
         message: "Cannot reply to a reply; reply to the top-level comment instead",
       });
     }
+    // Checked against the parent's author as well as the recipe's owner
+    // above: a reply notifies whoever is being replied to, and on someone
+    // else's recipe that is a different person. Blocking someone did not
+    // stop them replying to you there.
+    if (await isBlockedEitherWay(req.user._id, parent.user)) {
+      return res.status(403).json({ message: "You cannot reply to this comment" });
+    }
+
     parentId = parent._id;
     parentAuthor = parent.user;
   }
