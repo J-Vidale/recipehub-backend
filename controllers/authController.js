@@ -7,6 +7,7 @@ import {
   validatePassword,
   MAX_PASSWORD_LENGTH,
 } from "../utils/credentials.js";
+import { disconnectUser } from "../config/socket.js";
 
 // A hash of a value no submitted password will match, used to spend the
 // same time on a username that does not exist as on one that does.
@@ -160,6 +161,11 @@ export const changePassword = async (req, res) => {
   // stay true for anything else that ever sets a password.
   user.password = newPassword;
   await user.save();
+
+  // Rejecting the old token at the handshake only stops the next
+  // connection. A socket opened before this moment would stay connected
+  // and keep delivering, so the sentence below would not be true of it.
+  disconnectUser(String(user._id));
 
   res.json({
     message: "Password changed. Any other device signed in as you has been signed out.",

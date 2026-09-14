@@ -13,7 +13,18 @@ import Notification from "../models/Notification.js";
 import Report from "../models/Report.js";
 import User from "../models/User.js";
 import cloudinary from "../config/cloudinary.js";
-import { deleteAccount } from "../utils/deleteAccount.js";
+// An open socket is the one thing the cascade cannot delete rows for: the
+// handshake is the only place its token is ever read, so a connection made
+// before the account was deleted would stay open on nothing.
+const disconnectUser = vi.fn();
+vi.mock("../config/socket.js", () => ({
+  disconnectUser: (...args) => disconnectUser(...args),
+  emitToUser: vi.fn(),
+  initSocket: vi.fn(),
+  authorizeSocket: vi.fn(),
+}));
+
+const { deleteAccount } = await import("../utils/deleteAccount.js");
 
 // Deleting an account is the one operation with no undo, so the thing
 // worth testing is that it reaches everything. A collection missed here
@@ -44,6 +55,7 @@ const findReturning = (rows) => ({
 
 beforeEach(() => {
   calls = [];
+  disconnectUser.mockReset();
 
   vi.spyOn(User, "findById").mockReturnValue({
     select: () => ({ lean: async () => ({ _id: userId, avatarPublicId: "avatars/me", savedRecipes: [savedRecipe] }) }),
@@ -199,5 +211,27 @@ describe("the images", () => {
     });
     vi.spyOn(console, "error").mockImplementation(() => {});
     await expect(deleteAccount(userId)).resolves.toBe(true);
+  });
+});
+
+describe("the live connection", () => {
+  it("is closed, not left open on an account that no longer exists", async () => {
+    await deleteAccount(userId);
+
+    expect(
+      disconnectUser,
+      "the socket stayed connected after the account was deleted"
+    ).toHaveBeenCalledWith(String(userId));
+  });
+
+  it("is closed once the account row is gone, not before", async () => {
+    // Same reasoning as the row order itself: while the account exists,
+    // its token still buys something, so there is nothing to gain by
+    // cutting the connection first.
+    await deleteAccount(userId);
+
+    const deletedAt = calls.findIndex((call) => call.label === "user.delete");
+    expect(deletedAt).toBeGreaterThanOrEqual(0);
+    expect(disconnectUser).toHaveBeenCalledTimes(1);
   });
 });
