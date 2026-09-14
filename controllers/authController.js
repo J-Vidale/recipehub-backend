@@ -125,3 +125,49 @@ export const loginUser = async (req, res) => {
     });
   }
 };
+
+// PATCH /api/auth/password   body: { currentPassword, newPassword }
+//
+// Changing a password without ending the sessions that already exist does
+// not solve the problem people change a password for. Saving a new one
+// stamps passwordChangedAt, and protect() refuses any token minted before
+// it - so whoever was using the old password is logged out, everywhere.
+// The caller gets a fresh token so they are not logged out by their own
+// change.
+export const changePassword = async (req, res) => {
+  const { currentPassword, newPassword } = req.body ?? {};
+
+  if (typeof currentPassword !== "string" || !currentPassword) {
+    return res.status(400).json({ message: "Your current password is required" });
+  }
+  const problem = validatePassword(newPassword);
+  if (problem) {
+    return res.status(400).json({ message: problem });
+  }
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ message: "That is already your password" });
+  }
+
+  const user = await User.findById(req.user._id).select("+password");
+  if (!user) {
+    return res.status(404).json({ message: "Account not found" });
+  }
+
+  const matches = await bcrypt.compare(currentPassword, user.password);
+  if (!matches) {
+    // 403, not 401: the session is valid, it is the confirmation that
+    // failed. A 401 would tell the client to clear the session, which is
+    // how mistyping a password logs someone out instead of telling them.
+    return res.status(403).json({ message: "That password is not correct" });
+  }
+
+  // The model hashes on save and stamps passwordChangedAt there, so both
+  // stay true for anything else that ever sets a password.
+  user.password = newPassword;
+  await user.save();
+
+  res.json({
+    message: "Password changed. Any other device signed in as you has been signed out.",
+    token: generateToken(user._id),
+  });
+};

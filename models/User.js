@@ -27,6 +27,11 @@ const userSchema = new mongoose.Schema(
       // res.json(user) can ship the bcrypt hash by omission.
       select: false,
     },
+
+    // When the password last changed, so a token minted before it can be
+    // refused. Unset on an account whose password has never changed, which
+    // reads as "no token is too old".
+    passwordChangedAt: { type: Date },
     savedRecipes: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -61,11 +66,23 @@ userSchema.index(
   { unique: true, collation: CASE_INSENSITIVE, name: "username_ci_unique" }
 );
 
-// Hash password before saving
+// Hash password before saving, and record when it changed.
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
+
+  // Tokens are stateless and last a week, so without this a password
+  // change would leave every session that already existed still working -
+  // including whoever's use of the old password prompted the change. This
+  // is what protect() compares a token's issue time against.
+  //
+  // A second in the past on purpose: a JWT's iat is whole seconds, so the
+  // token minted moments after this save can carry the same second and
+  // would otherwise be read as older than the change and rejected.
+  if (!this.isNew) {
+    this.passwordChangedAt = new Date(Date.now() - 1000);
+  }
   next();
 });
 

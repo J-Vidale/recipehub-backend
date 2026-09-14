@@ -1,6 +1,20 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
+/**
+ * A token minted before the password changed is no longer good.
+ *
+ * Tokens are stateless and last a week, so without this a password change
+ * left every session that already existed still working - including the
+ * one whose existence prompted the change. iat is in whole seconds;
+ * passwordChangedAt is stored a second early to keep the token issued
+ * moments after a change from being caught by its own rule.
+ */
+const mintedBeforePasswordChange = (decoded, user) => {
+  if (!user?.passwordChangedAt || !decoded?.iat) return false;
+  return decoded.iat * 1000 < new Date(user.passwordChangedAt).getTime();
+};
+
 export const protect = async (req, res, next) => {
   let token = req.headers.authorization?.startsWith('Bearer')
     ? req.headers.authorization.split(' ')[1]
@@ -13,6 +27,9 @@ export const protect = async (req, res, next) => {
     req.user = await User.findById(decoded.id).select('-password').lean();
     if (!req.user) {
       return res.status(401).json({ message: 'User not found' });
+    }
+    if (mintedBeforePasswordChange(decoded, req.user)) {
+      return res.status(401).json({ message: 'Session ended. Please log in again.' });
     }
     next();
   } catch (err) {
@@ -32,7 +49,13 @@ export const optionalAuth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password').lean();
+    const user = await User.findById(decoded.id).select('-password').lean();
+    // Same rule on the public endpoints: a stale token should not keep
+    // reporting a viewer, or "do I follow this person" would still answer
+    // for a session that has been ended.
+    if (user && !mintedBeforePasswordChange(decoded, user)) {
+      req.user = user;
+    }
   } catch (err) {
     // Invalid/expired token on a public endpoint — proceed as a guest.
   }
