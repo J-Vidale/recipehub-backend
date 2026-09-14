@@ -62,6 +62,15 @@ export const collectStartupWarnings = (env = process.env) => {
     );
   }
 
+  // Not an error - a site can run with nobody moderating - but reports
+  // pile up unread and nothing says so, which is exactly the state this
+  // variable was added to get out of.
+  if (production && !isSet(env.ADMIN_USERNAMES)) {
+    warnings.push(
+      "ADMIN_USERNAMES is not set, so nobody can read the reports members file. Set it to a comma-separated list of usernames to give them the moderation queue at /moderation."
+    );
+  }
+
   return warnings;
 };
 
@@ -70,6 +79,7 @@ export const summariseConfig = (env = process.env, origins = []) => [
   `Allowed browser origins: ${origins.length > 0 ? origins.join(", ") : "(none)"}`,
   `Error monitoring: ${isSet(env.SENTRY_DSN) ? "on" : "off (SENTRY_DSN unset)"}`,
   `Cache: ${isSet(env.REDIS_URL) ? "Redis configured" : "off (REDIS_URL unset)"}`,
+  `Moderators: ${isSet(env.ADMIN_USERNAMES) ? env.ADMIN_USERNAMES : "(none - ADMIN_USERNAMES unset)"}`,
 ];
 
 // Printed together so the ordering is fixed and the warnings cannot scroll

@@ -68,3 +68,11 @@ services:
       # may not want yet:
       #   SENTRY_DSN  - error reporting, from a Node.js project at sentry.io
       #   REDIS_URL   - response cache; without it the app runs uncached
+
+      # Comma-separated usernames allowed to read the moderation queue at
+      # /moderation. Unset means nobody can - reports are still filed, and
+      # nobody sees them. Deliberately an environment variable rather than a
+      # flag on the user: nothing a request can do changes it, and there is no
+      # safe way to grant the first one through an API with no admin yet.
+      - key: ADMIN_USERNAMES
+        sync: false

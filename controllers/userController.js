@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import Recipe from '../models/Recipe.js';
 import Follow from '../models/Follow.js';
 import Block from '../models/Block.js';
+import { isAdmin } from '../middleware/adminMiddleware.js';
 import cloudinary from '../config/cloudinary.js';
 import { destroyQuietly } from '../utils/media.js';
 import { deleteAccount as purgeAccount } from '../utils/deleteAccount.js';
@@ -19,7 +20,12 @@ export const getMe = async (req, res) => {
   // findById(undefined) into an empty filter, so the query became
   // findOne({}) and returned whichever user happened to be first in the
   // collection, to every caller.
-  res.json(req.user);
+  //
+  // isAdmin is derived from the environment on every request rather than
+  // stored, so it cannot be set by a write and cannot go stale. The client
+  // uses it to decide whether to show the moderation link; the server
+  // never trusts it back.
+  res.json({ ...req.user, isAdmin: isAdmin(req.user) });
 };
 
 // GET /api/users/:id — public profile

@@ -28,6 +28,13 @@ const MOUNTS = [
 // Only params that are meant to hold an ObjectId. `:tag` is a word.
 const isIdParam = (name) => name === "id" || /Id$/.test(name);
 
+// Moderation routes are hidden from anyone who is not a moderator: the
+// admin check runs before the id is looked at and answers 404, because a
+// 400 would confirm the route exists and that somebody is allowed to use
+// it. The caller below is not a moderator, so 404 is the right answer for
+// it - the 400 those routes give a moderator is covered separately.
+const HIDDEN_FROM_NON_ADMINS = /^\/api\/reports\b/;
+
 let request;
 let app;
 let token;
@@ -102,6 +109,7 @@ describe("every route taking an id", () => {
   it("says the request was bad rather than guessing at not-found", async () => {
     const wrong = [];
     for (const route of idRoutes) {
+      if (HIDDEN_FROM_NON_ADMINS.test(route.path)) continue;
       const url = route.path.replace(/:(\w+)/g, JUNK);
       const res = await request(app)[route.method](url)
         .set("Authorization", `Bearer ${token}`)
