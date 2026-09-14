@@ -74,10 +74,12 @@ export const registerUser = async (req, res) => {
       const field = Object.keys(err.keyPattern || {})[0] || "field";
       return res.status(400).json({ message: `${field} already in use` });
     }
-    res.status(500).json({
-      message:
-        process.env.NODE_ENV === "development" ? err.message : "Server error",
-    });
+    // Anything else is re-thrown rather than answered here. The error
+    // middleware already sends "Server error" in production, so the
+    // response is unchanged - but it is also the only thing Sentry is
+    // wired to, and a registration failing for everyone should not be
+    // something we find out from a user.
+    throw err;
   }
 };
 
@@ -96,34 +98,27 @@ export const loginUser = async (req, res) => {
     return res.status(401).json({ message: "Invalid username or password" });
   }
 
-  try {
-    // Same collation as registration, so the name that was accepted is the
-    // name that logs in, whatever case it is typed in.
-    const user = await User.findOne({ username: username.trim() })
-      .collation(CASE_INSENSITIVE)
-      .select("+password");
-    // The comparison runs either way. Skipping it when there is no such
-    // user is what makes the response time say whether the name exists.
-    const matches = user
-      ? await user.matchPassword(password)
-      : await bcrypt.compare(password, ABSENT_USER_HASH);
+  // Same collation as registration, so the name that was accepted is the
+  // name that logs in, whatever case it is typed in.
+  const user = await User.findOne({ username: username.trim() })
+    .collation(CASE_INSENSITIVE)
+    .select("+password");
+  // The comparison runs either way. Skipping it when there is no such
+  // user is what makes the response time say whether the name exists.
+  const matches = user
+    ? await user.matchPassword(password)
+    : await bcrypt.compare(password, ABSENT_USER_HASH);
 
-    if (!user || !matches) {
-      return res.status(401).json({ message: "Invalid username or password" });
-    }
-
-    res.json({
-      _id: user._id,
-      username: user.username,
-      email: user.email,
-      token: generateToken(user._id),
-    });
-  } catch (err) {
-    res.status(500).json({
-      message:
-        process.env.NODE_ENV === "development" ? err.message : "Server error",
-    });
+  if (!user || !matches) {
+    return res.status(401).json({ message: "Invalid username or password" });
   }
+
+  res.json({
+    _id: user._id,
+    username: user.username,
+    email: user.email,
+    token: generateToken(user._id),
+  });
 };
 
 // PATCH /api/auth/password   body: { currentPassword, newPassword }
