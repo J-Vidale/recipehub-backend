@@ -8,7 +8,8 @@ import CommentLike from "../models/CommentLike.js";
 import Follow from "../models/Follow.js";
 import { getSingleRecipe, getFollowingFeed } from "../controllers/recipeController.js";
 import { getComments } from "../controllers/commentController.js";
-import { likedRecipeIds, sharedRecipeIds, likedCommentIds } from "../utils/viewerState.js";
+import User from "../models/User.js";
+import { likedRecipeIds, sharedRecipeIds, likedCommentIds, hasSavedRecipe } from "../utils/viewerState.js";
 import recipeRouter from "../routes/recipeRoutes.js";
 
 // Nothing told the like and share buttons what this reader had already
@@ -68,27 +69,53 @@ describe("a recipe page", () => {
     withRecipe();
     rowsFor(Like, [recipeId]);
     rowsFor(Share, []);
+    vi.spyOn(User, "exists").mockResolvedValue({ _id: me });
 
     const r = res();
     await getSingleRecipe({ params: { id: recipeId.toString() }, user: { _id: me } }, r);
 
     expect(r.body.likedByMe).toBe(true);
     expect(r.body.sharedByMe).toBe(false);
+    expect(r.body.savedByMe).toBe(true);
     expect(r.body.title, "the rest of the recipe still comes through").toBe("Soup");
+  });
+
+  it("answers the saved question here rather than by shipping the whole list", async () => {
+    // The page used to fetch every recipe the reader had saved, fully
+    // populated, and search it for this one id.
+    withRecipe();
+    rowsFor(Like, []);
+    rowsFor(Share, []);
+    const exists = vi.spyOn(User, "exists").mockResolvedValue(null);
+
+    const r = res();
+    await getSingleRecipe({ params: { id: recipeId.toString() }, user: { _id: me } }, r);
+
+    expect(r.body.savedByMe).toBe(false);
+    expect(exists).toHaveBeenCalledWith({ _id: me, savedRecipes: recipeId });
   });
 
   it("answers false for both to a logged-out reader, without a lookup", async () => {
     withRecipe();
     const likes = vi.spyOn(Like, "find");
     const shares = vi.spyOn(Share, "find");
+    const saved = vi.spyOn(User, "exists");
 
     const r = res();
     await getSingleRecipe({ params: { id: recipeId.toString() } }, r);
 
     expect(r.body.likedByMe).toBe(false);
     expect(r.body.sharedByMe).toBe(false);
+    expect(r.body.savedByMe).toBe(false);
     expect(likes).not.toHaveBeenCalled();
     expect(shares).not.toHaveBeenCalled();
+    expect(saved).not.toHaveBeenCalled();
+  });
+
+  it("does not ask about a saved recipe for a reader who is not signed in", async () => {
+    const saved = vi.spyOn(User, "exists");
+    expect(await hasSavedRecipe(null, recipeId)).toBe(false);
+    expect(saved).not.toHaveBeenCalled();
   });
 });
 

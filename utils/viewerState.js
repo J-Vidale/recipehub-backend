@@ -14,6 +14,7 @@
 import Like from "../models/Like.js";
 import Share from "../models/Share.js";
 import CommentLike from "../models/CommentLike.js";
+import User from "../models/User.js";
 
 const actedOn = async (Model, field, viewerId, targetIds) => {
   // No viewer (a logged-out reader) and no rows both mean the same thing
@@ -32,3 +33,16 @@ export const sharedRecipeIds = (viewerId, recipeIds) =>
 
 export const likedCommentIds = (viewerId, commentIds) =>
   actedOn(CommentLike, "comment", viewerId, commentIds);
+
+// Saved recipes are an array on the user rather than a collection of their
+// own, so this one is a single exists() against that array instead of a
+// lookup over rows.
+//
+// The recipe page used to answer this by fetching the whole saved list -
+// every saved recipe, fully populated - and searching it for one id. That
+// is an unbounded download to decide whether one button says "Save" or
+// "Unsave".
+export const hasSavedRecipe = async (viewerId, recipeId) => {
+  if (!viewerId) return false;
+  return Boolean(await User.exists({ _id: viewerId, savedRecipes: recipeId }));
+};

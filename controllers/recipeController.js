@@ -14,7 +14,7 @@ import { getCached, setCached } from "../utils/cache.js";
 import { moderateShortText, MAX_CATEGORY_LENGTH } from "../utils/moderateText.js";
 import { destroyQuietly } from "../utils/media.js";
 import { purgeRecipes } from "../utils/purgeRecipes.js";
-import { likedRecipeIds, sharedRecipeIds } from "../utils/viewerState.js";
+import { likedRecipeIds, sharedRecipeIds, hasSavedRecipe } from "../utils/viewerState.js";
 import { parseListQuery, parsePageQuery, withCursor, buildPage } from "../utils/pagination.js";
 
 const DISCOVER_CACHE_TTL_SECONDS = 60;
@@ -326,15 +326,17 @@ export const getSingleRecipe = async (req, res) => {
   // come back. The route carries optionalAuth, so a logged-out reader gets
   // false for both without a lookup.
   const viewerId = req.user?._id;
-  const [liked, shared] = await Promise.all([
+  const [liked, shared, savedByMe] = await Promise.all([
     likedRecipeIds(viewerId, [recipe._id]),
     sharedRecipeIds(viewerId, [recipe._id]),
+    hasSavedRecipe(viewerId, recipe._id),
   ]);
 
   res.json({
     ...recipe,
     likedByMe: liked.has(String(recipe._id)),
     sharedByMe: shared.has(String(recipe._id)),
+    savedByMe,
   });
 };
 
